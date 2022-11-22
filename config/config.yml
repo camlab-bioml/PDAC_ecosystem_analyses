@@ -1,0 +1,81 @@
+version: 'v2'
+
+data:
+  sce: 'data/sces/pipeline-output/'
+  doublet_detection_results: 'data/doublet-detection/'
+  reference: 'data/references/'
+  cell_type_markers: 'resources/markers/PDAC_cell_type_markers.yml'
+
+celltype_annot_resource_dir: "resources/cell-type-assignment/"
+
+cohorts: 
+  - Lee
+  - Lin
+  - Peng
+  - Steele
+  - Toronto
+  - SteeleNormTissue
+  - PengNormTissue
+  - NormTissue
+  - Hwang
+
+data_processing:
+  sce_filtering: 
+    mito_thresh: 20
+    detected_thresh: 500
+    total_thresh: 1000
+
+azimuth:
+  reference: 'pancreasref'
+  annotation_level: 'annotation.l1' # only for pancreasref (for pbmcref annotation levels are celltype.l1, celltype.l2 (default), and celltype.l3)
+  redim_to_plot: 'ref.umap'
+  redim_metadata_to_color: 'sample'
+  sce_assay_to_plot: 'logcounts'
+
+celltypes_csv: "resources/cell-type-assignment/pancreas_cell_types.csv"
+
+infercnv:
+  gene_order_file: "resources/cell-type-assignment/infercnv/gencode_v19_gen_pos.complete.txt"
+  obs_cohorts: "resources/cell-type-assignment/infercnv/obs_cohorts.csv"
+  ref_cohort: 'PengNormTissue'
+  celltype: 'ductal'
+
+
+singler:
+  celltypes_focused: "resources/cell-type-assignment/cell_types_to_zoom_in.csv"
+  ncol_for_violin_plots: 8
+  redim_to_plot: 'TSNE_on_Harmony'
+  redim_metadata_to_color: 'sample'
+  celltype_label_field: 'singler.pruned.label'
+  sce_assay_to_plot: 'logcounts'
+
+immune_cell_type_markers: "resources/markers/immune_cell_type_markers.yml" # from Michaels' whatsthatcell marker list
+
+liger:
+  celltypes_for_signature: "resources/cell-type-signature/signature-extraction/cell_types_for_signature.csv"
+  discovery_cohort_list: "resources/cell-type-signature/signature-extraction/discovery_cohorts.csv"
+  validation_cohort_list: "resources/cell-type-signature/signature-extraction/validation_cohorts.csv"
+  seedlist: "resources/cell-type-signature/signature-extraction/seedlist.csv"
+  parameter_range: "resources/cell-type-signature/signature-extraction/parameter_range.csv"
+  parameterlist: "resources/cell-type-signature/signature-extraction/parameterlist.csv"
+  exprssion_variation_threshold: 0.1
+
+signatures:
+  num_top_genes: 5
+  corr_method: 'spearman'
+  corr_thres: 0.4
+  dist_method: 'minkowski'
+  minkowski_p: 1
+  dist_thres: 25000
+  validation_metric_to_use: 'corr'
+  known_signature_markers_dir: 'resources/markers/known-signature-markers/'
+  known_signature_markers_file_pattern: '_list.csv'
+  analyze_sig_loading: TRUE
+  compute_sig_loading_quantiles: TRUE
+  sig_activation_threshold_quantile: 0.75
+  get_sig_loading_profiles: TRUE
+
+patient_profiles:
+  build_patient_profiles: TRUE
+  profile_ct_config: 'resources/patient-profiles/compartment_celltypes.csv'
+  

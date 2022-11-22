@@ -1,0 +1,34 @@
+cell_types:
+    G_MDSC:
+        positive:
+            - CD3D
+            - CD3E
+            - CD3G
+            - TRAC
+            - CD4
+            - TCF7
+            - CD27
+            - IL7R
+        negative:
+            - CD8A
+            - CD8B
+            - GNLY
+            - NKG7
+            - CST7
+        
+    M_MDSC:
+        positive:
+            - CD3D
+            - CD3E
+            - CD3G
+            - TRAC
+            - CD8A
+            - CD8B
+            - GZMK
+            - CCL5
+            - NKG7
+        negative:
+            - CD4
+            - FCER1G
+    
+    
