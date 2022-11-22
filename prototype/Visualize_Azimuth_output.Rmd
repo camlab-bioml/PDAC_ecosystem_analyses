@@ -1,0 +1,115 @@
+---
+title: "Visualize Azimuth output"
+output: html_document
+date: '2022-07-14'
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(patchwork)
+  library(ComplexHeatmap)
+  library(fastcluster)
+})
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+seu <- readRDS("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-seu-Lee.rds")
+score_mtx <- read_tsv("../output/v2/results/Azimuth-annotation/cell-type-annotation-scores-Lee.tsv")
+```
+
+```{r}
+dimred = "ref.umap"
+
+print("Dimensionality reductions available for plotting:")
+Reductions(seu)
+print("Dimensionality reduction used for plotting:")
+print(dimred)
+```
+
+```{r}
+p1 <- DimPlot(seu, reduction = "ref.umap", group.by = paste0("predicted.", "annotation.l1"), label = TRUE, repel = T, label.size = 3) + NoLegend()
+p2 <- DimPlot(seu, reduction = "ref.umap", group.by = "sample")
+p1 + p2
+```
+
+```{r}
+seu <- NormalizeData(seu)
+Idents(seu) <- paste0("predicted.", "annotation.l1")
+
+cell_types <- seu@assays[[paste0("prediction.score.", "annotation.l1")]]@data %>% rownames()
+cell_types
+
+plist <- lapply(cell_types, function(ct) {
+  FeaturePlot(seu, reduction = dimred,
+              features = paste0("predictionscore", gsub(".", "", "annotation.l1", fixed = T), "_", ct)) +
+    scale_color_gradient(limits = c(0,1), low = "grey80", high = "blue", name = "predicted score") + 
+    labs(title = ct)
+})
+names(plist) <- cell_types
+
+lapply(cell_types, function(ct) {
+  dir.create("abc/", recursive = T)
+  png(paste0("abc/", ct, ".png"))
+  print(plist[[ct]])
+  dev.off()
+})
+
+p3 <- wrap_plots(plist[1:3], guides = "collect")
+p3
+```
+
+```{r}
+mtx <- score_mtx %>% 
+  select(!matches("cell_id|cell_type")) %>% 
+  as.matrix() %>%
+  t()
+colnames(mtx) <- score_mtx$cell_id
+top_ha <- HeatmapAnnotation(Assigned = score_mtx$cell_type, name = "Assigned cell type", 
+                            col = list(Assigned = structure(colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(unique(score_mtx$cell_type))), 
+                                                            names = unique(score_mtx$cell_type))))
+top_ha
+hm <- Heatmap(mtx, name = "Predicted score", 
+              col = colorRampPalette(viridisLite::viridis(100))(100),
+              show_column_names = F,
+              top_annotation = top_ha,
+              heatmap_legend_param = list(direction = "vertical"),
+              column_split = score_mtx$cell_type)
+
+draw(hm, merge_legend = T)
+```
+
+```{r}
+png("test.png", width = 1200, height = 500)
+draw(hm, merge_legend = T)
+dev.off()
+```
+
+```{r}
+structure(colorRampPalette(viridisLite::turbo(100))(length(unique(score_mtx$cell_type))), names = unique(score_mtx$cell_type))
+RColorBrewer::brewer.pal(15, "Set3")
+barplot(1:15, col=rainbow(15))
+```
+
+```{r}
+colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(15)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

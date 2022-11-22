@@ -1,0 +1,70 @@
+---
+title: "Make Stan Data"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+
+suppressPackageStartupMessages({
+  library(SingleCellExperiment) # BioConductor
+  library(tidyverse) # CRAN
+  library(here) # CRAN
+  library(DT) # CRAN
+  library(magrittr)
+  library(stats)
+})
+```
+
+# helper functions
+
+```{r}
+
+```
+
+# load data
+
+```{r}
+celltype <- "Mono"
+condition <- "validated"
+```
+
+```{r}
+df.sig <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", 
+                         celltype, 
+                         "/loading-matrices/", 
+                         celltype, 
+                         "-signature-loading-", 
+                         condition, 
+                         ".tsv"))
+```
+
+# construct elements of Stan data list
+
+```{r}
+N = nrow(df.sig)
+P = length(unique(df.sig$sample))
+K = length(grep(celltype, names(df.sig), value = T))
+Y = df.sig %>% select(contains(celltype)) %>% as.matrix()
+x = plyr::mapvalues(df.sig$sample, 
+                    from = unique(df.sig$sample),
+                    to = seq(length(unique(df.sig$sample)))) %>% as.numeric()
+```
+
+# build the stan data list for model fitting
+
+```{r}
+stan.data <- list(
+  N = N,
+  P = P,
+  K = K,
+  Y = Y,
+  x = x
+)
+```
+
+```{r}
+saveRDS(stan.data, file = "Stan/stanData.rds")
+```

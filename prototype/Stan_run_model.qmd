@@ -1,0 +1,48 @@
+---
+title: "Run Stan model"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+
+suppressPackageStartupMessages({
+  library(tidyverse) # CRAN
+  library(here) # CRAN
+  library(DT) # CRAN
+  library(stats)
+  library(magrittr)
+  library(gdata)
+  library(rstan)
+})
+```
+
+# load stan data and other parameters
+
+```{r}
+stan.data <- readRDS("Stan/stanData.rds")
+
+nIter <- 500
+nWarmup <- 100
+nChains <- 1
+nCores <- 16
+treeDepth <- 15
+```
+
+# compile model
+
+```{r}
+stanc("Stan/model/test1.stan")
+```
+
+# fit stan
+
+```{r}
+fit.stan <- stan(file = "Stan/model/test1.stan",
+                 data = stan.data,
+                 #control = list(max_treedepth = treeDepth),
+                 warmup = nWarmup, iter = nIter,
+                 chains = nChains, cores = nCores, thin = 1)
+```

@@ -1,0 +1,92 @@
+---
+title: "Visualize LIGER parameter sweep metrics"
+format: html
+editor: visual
+---
+
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(tidyr)
+  library(stringi)
+  library(readr)
+  library(ggpubr)
+  library(ggsci)
+  library(patchwork)
+})
+```
+
+```{r}
+#| echo: false
+metrics <- read_tsv("../output/v2/results/LIGER/parameter-sweep/metrics/Mono/discovery/Mono-discovery-parameter-sweep-metrics.tsv")
+```
+
+```{r}
+ggplot(metrics, aes(x = K, y = Lambda, z = overall)) + 
+  facet_wrap(~ metric) + 
+  geom_contour_filled() + 
+  theme_pubclean()
+```
+
+```{r}
+p1 <- ggplot(metrics %>% filter(metric == "alignment"), aes(x = K, y = Lambda, colour = overall)) + 
+  geom_point() + 
+  theme_pubr() + 
+  scale_color_viridis_c(name = "alignment", option = "A")
+
+p2 <- ggplot(metrics %>% filter(metric == "agreement"), aes(x = K, y = Lambda, colour = overall)) + 
+  geom_point() + 
+  theme_pubr() + 
+  scale_color_viridis_c(name = "agreement", option = "D")
+```
+
+```{r}
+p1 + p2
+```
+
+```{r}
+metrics <- metrics %>% 
+  group_by(metric, K, Lambda) %>%
+  mutate(mean = mean(overall),
+         sd = sd(overall, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(lambda = as.factor(Lambda),
+         k = as.factor(K))
+```
+
+```{r}
+p3 <- ggplot(metrics, aes(x = K, y = mean, group = lambda, color = lambda)) + 
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), width = .1, position = position_dodge(0.05)) +
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~ metric, scales = "free_y") + 
+  labs(x = "K-Value", y = "Score", title = "Selecting K") + 
+  scale_color_jco() + 
+  theme_pubr()
+
+p4 <- ggplot(metrics, aes(x = Lambda, y = mean, group = k, color = k)) + 
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), width = .1, position = position_dodge(0.05)) +
+  geom_line() + 
+  geom_point() +
+  facet_wrap(~ metric, scales = "free_y") + 
+  labs(x = "Lambda-Value", y = "Score", title = "Selecting Lambda") + 
+  scale_color_manual(values = colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(unique(metrics$k))),
+                     breaks = unique(metrics$k)) + 
+  theme_pubr()
+
+p3
+p4
+```
+
+```{r}
+png("test.png", width = 1600, height = 800)
+p3
+dev.off()
+```
+
+
+

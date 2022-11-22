@@ -1,0 +1,63 @@
+---
+title: "Plot Stan fit"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+
+suppressPackageStartupMessages({
+  library(tidyverse) # CRAN
+  library(here) # CRAN
+  library(DT) # CRAN
+  library(magrittr)
+  library(stats)
+  library(argparse)
+  library(gdata)
+  library(bayesplot)
+  library(jtools)
+  library(cowplot)
+  library(rstan)
+})
+```
+
+# load stan fit object
+
+```{r}
+fit.stan <- readRDS("Stan/stan_fit/stanFit.rds")
+```
+
+```{r}
+sig.num <- 6
+```
+
+```{r}
+traceplot(fit.stan, pars = paste0("lambda[1",",",1:sig.num,"]"))
+traceplot(fit.stan, pars = paste0("beta[",1:sig.num,"]"))
+pairs(fit.stan, pars = c("beta"))
+```
+
+```{r}
+plot_summs(fit.stan,
+           model.names = c(paste0(sig.num, "-sig")),
+           coefs = paste0("beta[",1:sig.num,"]"),
+           scale = F,
+           inner_ci_level = .95,
+           plot.distributions = T)
+```
+
+```{r}
+traceplot(fit.stan, pars = paste0("beta[",1:sig.num,"]"))
+traceplot(fit.stan.original, pars = paste0("beta[",1:sig.num,"]"))
+```
+
+```{r}
+plot_summs(fit.stan,
+           model.names = c("6-sig"),
+           coefs = paste0("beta[",1:sig.num,"]"),
+           scale = F,
+           inner_ci_level = .95,
+           plot.distributions = F)
+```

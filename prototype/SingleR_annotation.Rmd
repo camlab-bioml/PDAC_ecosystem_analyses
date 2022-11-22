@@ -1,0 +1,254 @@
+---
+title: "SingleR cell type assignment"
+output: html_document
+date: '2022-06-27'
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(Seurat)
+  library(SingleCellExperiment)
+  library(scuttle)
+  library(scater)
+  library(edgeR)
+  library(SingleR)
+  library(BiocParallel)
+  library(ggalluvial)
+  library(ggrepel)
+  library(ggpubr)
+})
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load subsetted sce
+```{r}
+sce <- readRDS("../output/v2/data/subset-sce/scRNASeq-immune-sce-Lee.rds")
+```
+
+```{r}
+tibble::as_tibble(colData(sce))
+```
+
+```{r}
+table(sce$sample)
+```
+
+# using celldex reference: NOT USED
+```{r}
+hpca.se <- celldex::HumanPrimaryCellAtlasData()
+hpca.se
+table(hpca.se$label.main)
+table(hpca.se$label.fine)
+```
+
+# using Azimuth reference
+```{r}
+sceRef <- readRDS("../data/references/immune-ref.rds") 
+tibble::as.tibble(colData(sceRef))
+tibble::as.tibble(rowData(sceRef))
+table(sceRef$celltype.l1)
+table(sceRef$celltype.l2)
+sceRef <- sceRef[,!is.na(sceRef$celltype.l1)]
+assays(sceRef)
+max(logcounts(sceRef))
+min(logcounts(sceRef))
+head(rownames(sceRef), 50)
+```
+
+# using MNP/MoMac-VERSE reference
+```{r}
+sceRef <- readRDS("../data/references/2021_MoMac_VERSE.RDS") %>% as.SingleCellExperiment(assay = "RNA")
+logcounts(sceRef) <- NULL
+
+tibble::as.tibble(colData(sceRef))
+table(sceRef$Tissue)
+table(sceRef$Study)
+table(sceRef$Status)
+table(sceRef$Clusters)
+sceRef <- sceRef[,grepl("Blood|Pancreas", sceRef$Tissue)]
+table(sceRef$Tissue)
+table(sceRef$Study)
+table(sceRef$Status)
+table(sceRef$Clusters)
+table(sceRef$ident)
+assays(sceRef)
+```
+
+# using single cell reference
+```{r}
+# filter human pancreas/PBMC datasets
+scRNAseq::listDatasets() %>% 
+  as.data.frame() %>% 
+  dplyr::filter(Taxonomy == 9606 & (Part == "peripheral blood mononuclear cells" | Part == "pancreas"))
+```
+
+## pancreas reference
+```{r}
+sceRef <- scRNAseq::BaronPancreasData("human", ensembl = F)
+
+# One should normally do cell-based quality control at this point, but for
+# brevity's sake, we will just remove the unlabelled libraries here.
+head(rownames(sceRef))
+table(sceRef$donor)
+table(sceRef$label)
+
+sceRef <- sceRef[,!is.na(sceRef$label)]
+
+# SingleR() expects reference datasets to be normalized and log-transformed.
+assays(sceRef)
+sceRef <- logNormCounts(sceRef)
+```
+
+
+## PBMC reference
+```{r}
+# needs QC
+sceRef <- scRNAseq::KotliarovPBMCData(mode = "rna", ensembl = F)
+
+# One should normally do cell-based quality control at this point, but for
+# brevity's sake, we will just remove the unlabelled libraries here.
+head(rownames(sceRef))
+tibble::as.tibble(colData(sceRef))
+table(sceRef$tenx_lane)
+table(sceRef$cohort)
+table(sceRef$batch)
+table(sceRef$hto_classification)
+table(sceRef$hto_classification_global)
+table(sceRef$hash_ID)
+table(sceRef$adjmfc.time)
+table(sceRef$sample)
+table(sceRef$sampleid)
+table(sceRef$joint_classification_global)
+table(sceRef$dmx_hto_match)
+table(sceRef$timepoint)
+
+hist(sceRef$nGene)
+hist(sceRef$nUMI)
+hist(sceRef$pctMT)
+
+sceRef <- sceRef[,!is.na(sceRef$label)]
+
+# SingleR() expects reference datasets to be normalized and log-transformed.
+assays(sceRef)
+sceRef <- logNormCounts(sceRef)
+```
+
+```{r}
+# needs QC
+sceRef <- scRNAseq::MairPBMCData(mode = "adt", ensembl = F)
+
+# One should normally do cell-based quality control at this point, but for
+# brevity's sake, we will just remove the unlabelled libraries here.
+head(rownames(sceRef))
+tibble::as.tibble(colData(sceRef))
+
+sceRef <- sceRef[,!is.na(sceRef$label)]
+
+# SingleR() expects reference datasets to be normalized and log-transformed.
+assays(sceRef)
+sceRef <- logNormCounts(sceRef)
+```
+
+```{r}
+# needs QC
+sceRef <- scRNAseq::StoeckiusHashingData(type = "pbmc", mode = "human", ensembl = F, strip.metrics = F)
+
+# One should normally do cell-based quality control at this point, but for
+# brevity's sake, we will just remove the unlabelled libraries here.
+head(rownames(sceRef))
+tibble::as.tibble(colData(sceRef))
+
+sceRef <- sceRef[,!is.na(sceRef$label)]
+
+# SingleR() expects reference datasets to be normalized and log-transformed.
+assays(sceRef)
+sceRef <- logNormCounts(sceRef)
+```
+
+# make the reference gene names match the test gene names
+```{r}
+intersect(rownames(sce), rownames(sceRef)) %>% length()
+# only needed for Muraro dataset? 
+# rownames(sceRef) <- stringr::str_split(rownames(sceRef), "__", simplify = T)[,1]
+```
+
+# find DE genes with edgeR NOT USED
+```{r}
+dge <- DGEList(counts(sceRef), group = colData(sceRef)[['celltype.l2']])
+dge <- calcNormFactors(dge)
+design <- model.matrix(~colData(sceRef)[['celltype.l2']])
+dge <- estimateGLMRobustDisp(dge, design = design)
+fit <- glmFit(dge, design = design)
+lrt <- glmLRT(fit)
+tt <- topTags(lrt, n = Inf)
+```
+
+# run SingleR
+```{r}
+ncol(sce)
+sceNew <- sce
+rm(sce)
+
+table(filter_genes(rownames(sceRef), "^RP[LS]|^MT-", return.gnames = F))
+
+# many parameters should be tuned 
+pred <- SingleR(test=sceNew, ref=sceRef, 
+                labels=sceRef$celltype.l2, 
+                restrict = filter_genes(rownames(sceRef), "^RP[LS]|^MT-", return.gnames = T),
+                genes = "de",
+                de.method="classic",
+                aggr.ref = T,
+                BPPARAM = BiocParallel::MulticoreParam(8))
+```
+
+# check SingleR results
+```{r}
+table(pred$labels) %>% sort(decreasing = T)
+```
+
+
+# compare with Azimuth results
+```{r}
+sceOld <- readRDS("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-Hwang.rds")
+```
+
+```{r}
+table(sceOld$cell_type)
+table(sceOld$predicted.annotation.l1)
+```
+
+```{r}
+#sceOld <- sceOld[,1:10000]
+```
+
+```{r}
+new.vs.old <- data.frame(cell = colnames(sceOld),
+                         new = sceOld$predicted.annotation.l1,
+                         old = sceOld$cell_type)
+
+new.vs.old$new <- plyr::mapvalues(new.vs.old$new, 
+                                  from = c("alpha", "beta", "delta", "gamma", "epsilon"),
+                                  to = rep("Endocrine", 5))
+new.vs.old$new <- str_to_title(new.vs.old$new)
+
+table(new.vs.old$new)
+```
+
+```{r, echo=FALSE}
+p <- ggplot(data = new.vs.old,
+       aes(axis1 = old, axis2 = new)) +
+  geom_alluvium(aes(fill = new)) +
+  geom_stratum() + 
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) + 
+  scale_x_discrete(limits = c("old", "new"),
+                   expand = c(0.15, 0.05)) + 
+  theme_pubclean() +
+  theme(legend.position = "right")
+
+p
+ggsave("plots/old_vs_new_cell_type_assignment.pdf", plot = p, height = 15)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

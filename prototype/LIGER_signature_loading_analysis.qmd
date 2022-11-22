@@ -1,0 +1,184 @@
+---
+title: "LIGER signature loading analysis"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(rliger)
+  library(sjstats)
+  library(tidyr)
+})
+```
+
+```{r}
+liger <- readRDS("../output/v2/results/LIGER/signature-extraction/LIGER-object/Mono/Mono-liger-discovery.rds")
+sce <- readRDS("../output/v2/data/cohort-discovery-validation-grouping/Mono/scRNAseq-Mono-sce-discovery.rds")
+```
+
+# LIGER signature loading results
+
+```{r}
+H <- liger@H
+H.norm <- liger@H.norm
+
+colnames(H.norm) <- paste0("Signature ", seq(ncol(H.norm)))
+```
+
+```{r}
+H.norm.df <- as.data.frame(H.norm)
+H.norm.df$cohort <- sce$cohort
+H.norm.df$sample <- sce$sample
+H.norm.df$cell_id <- rownames(H.norm.df)
+
+H.norm.df <- H.norm.df %>% pivot_longer(cols = contains("Signature"), names_to = "signature", values_to = "loading")
+```
+
+# get uniqueness of signatures
+
+```{r}
+siguniqueness.df <- H.norm.df %>%
+  group_by(cell_id) %>%
+  mutate(loading_scaled = loading / max(loading)) %>%
+  mutate(auc = sum(loading_scaled)) %>%
+  mutate(auc_top2 = sum(sort(loading_scaled, decreasing = T)[1:2])) %>%
+  mutate(top = signature[loading == max(loading)]) %>%
+  mutate(second = ifelse(length(signature[loading == sort(loading, decreasing = T)[2]]) == 1, 
+                         signature[loading == sort(loading, decreasing = T)[2]], 
+                         NA))
+```
+
+# check signature loading quantiles
+
+```{r}
+quantile_probs <- c(0, 0.25, 0.5, 0.75, 0.8, 0.9, 0.95, 0.99, 1)
+
+my_quantile <- function(x, probs) {
+  tibble(loading = quantile(x, probs), probs = probs)
+}
+```
+
+# compute quantiles for each cohort
+
+```{r}
+quantiles.df <- H.norm.df %>% 
+    group_by(cohort) %>%
+    summarise(my_quantile(loading, quantile_probs))
+
+quantiles.df$probs <- as.character(quantiles.df$probs)
+```
+
+# compute quantiles for each sample
+
+```{r}
+quantiles.df <- H.norm.df %>% 
+    group_by(sample) %>%
+    summarise(my_quantile(loading, quantile_probs))
+
+quantiles.df$probs <- as.character(quantiles.df$probs)
+```
+
+# compute quantiles for each signature
+
+```{r}
+quantiles.df <- H.norm.df %>% 
+    group_by(signature) %>%
+    summarise(my_quantile(loading, quantile_probs))
+
+quantiles.df$probs <- as.character(quantiles.df$probs)
+
+sigquantiles.df <- quantiles.df
+```
+
+# compute quantiles for each signature and cohort
+
+```{r}
+quantiles.df <- H.norm.df %>% 
+    group_by(signature, cohort) %>%
+    summarise(my_quantile(loading, quantile_probs))
+
+quantiles.df$probs <- as.character(quantiles.df$probs)
+```
+
+# compute quantiles for each signature and sample
+
+```{r}
+quantiles.df <- H.norm.df %>% 
+    group_by(signature, sample) %>%
+    summarise(my_quantile(loading, quantile_probs))
+
+quantiles.df$probs <- as.character(quantiles.df$probs)
+```
+
+# find highest loaded signature in each cell
+
+```{r}
+sigmax2.df <- H.norm.df %>%
+  group_by(cell_id) %>%
+  filter(loading == max(loading) | loading == sort(loading, decreasing = T)[2]) %>%
+  mutate(rank = ifelse(loading == max(loading), "First", "Second")) %>%
+  mutate(gap = max(loading) - min(loading)) %>%
+  ungroup()
+```
+
+# get number of top signatures in each cohort
+
+```{r}
+sigtop.df <- sigmax2.df %>%
+  dplyr::count(cohort, sample, signature, rank)
+```
+
+```{r}
+sigtop.df <- sigmax2.df %>%
+  filter(rank == "First") %>%
+  group_by(cohort, sample, signature) %>%
+  dplyr::summarise(n_cells = n()) %>%
+  mutate(freq = n_cells / sum(n_cells)) %>%
+  pivot_wider(names_from = signature, values_from = freq) %>%
+  mutate_at(vars(contains("Signature")), ~replace(., is.na(.), 0)) %>%
+  summarise_each(funs(sum)) %>%
+  ungroup()
+```
+
+# get summarised signature loadings in each patient
+
+```{r}
+sigloadings.df <- H.norm.df %>%
+  group_by(cohort, sample, signature) %>%
+  summarise(mean = mean(loading), 
+            median = median(loading)) %>%
+  ungroup()
+```
+
+# get frequencies of activated signatures in each sample
+
+```{r}
+sigquantiles75.df <- sigquantiles.df %>% filter(probs == .75)
+```
+
+```{r}
+sigquantilepass.df <- H.norm.df %>%
+  group_by(cell_id) %>%
+  mutate(passquantile = loading >= sigquantiles75.df$loading[which(sigquantiles75.df$signature == signature)]) %>%
+  ungroup()
+```
+
+```{r}
+sigquantilepass.df <- sigquantilepass.df %>%
+  select(-c(cell_id, loading)) %>%
+  group_by(cohort, sample, signature) %>%
+  dplyr::count(passquantile) %>%
+  mutate(freq = n / sum(n)) %>%
+  ungroup() %>%
+  filter(passquantile == T)
+```
+
+

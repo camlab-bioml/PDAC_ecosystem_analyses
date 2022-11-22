@@ -1,0 +1,79 @@
+---
+title: "Visualize SingleR output"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(patchwork)
+  library(tibble)
+  library(scater)
+  library(Nebulosa)
+})
+#knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+cohort = "Lin"
+sce <- readRDS(paste0("../output/v2/data/SingleR-annotation/immune/sceRNASeq-SingleR-annotated-immune-sce-", cohort, ".rds"))
+score_mtx <- readRDS(paste0("../output/v2/results/SingleR-annotation/immune/DFrame/immune-cell-type-prediction-", cohort, ".rds"))
+```
+
+```{r}
+as.tibble(colData(sce))
+```
+
+```{r}
+dimred = "TSNE_on_Harmony"
+sce_assay_to_plot = "logcounts"
+singler_label_field = "singler.pruned.label"
+colour_label_field = "sample"
+```
+
+```{r}
+plotReducedDim(sce, 
+               dimred = dimred, 
+               by_exprs_values = sce_assay_to_plot,
+               colour_by = singler_label_field) + 
+  scale_color_manual(values = colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(unique(colData(sce)[[singler_label_field]]))),
+                     breaks = unique(colData(sce)[[singler_label_field]])) + 
+  labs(colour = singler_label_field)
+
+plotReducedDim(sce, 
+               dimred = dimred,
+               by_exprs_values = sce_assay_to_plot,
+               colour_by = colour_label_field)
+```
+
+```{r}
+celltypes <- score_mtx@listData$scores %>% colnames()
+```
+
+```{r}
+lapply(celltypes, function(celltype) {
+  colData(sce)[['assignment score']] <- score_mtx@listData$scores[,celltype]
+  plotReducedDim(sce, 
+                 dimred = dimred,
+                 by_exprs_values = sce_assay_to_plot,
+                 colour_by = 'assignment score') + 
+    labs(title = celltype)
+})
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

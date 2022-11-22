@@ -1,0 +1,131 @@
+---
+title: "LIGER signature validation"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(corrplot)
+  library(stringr)
+  library(ComplexHeatmap)
+})
+```
+
+```{r}
+celltype = "Mono"
+```
+
+```{r}
+w <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-gene-loading.tsv"))
+
+genes <- w$gene
+w$gene <- NULL
+rownames(w) <- genes
+
+rm(genes)
+```
+
+```{r}
+w.corr = cor(log1p(w), use = "complete.obs", method = "spearman")
+w.corr <- as.data.frame(w.corr)
+```
+
+```{r}
+corrplot::corrplot(corr = as.matrix(w.corr))
+```
+
+```{r}
+tibble(w.corr)
+```
+
+```{r}
+sig.num = length(w.corr) / 2
+w.corr.mtx <- w.corr[(sig.num+1):nrow(w.corr),1:sig.num]
+validated.sig.df <- data.frame(discovery = NA, validation.1 = NA, validation.1.corr = NA, validated = NA, validation.2 = NA, validation.2.corr = NA)
+validated = 1
+
+for (s in seq(sig.num)) {
+  max.corr.1 = 0
+  max.corr.2 = 0
+  val.1 = 0
+  val.2 = 0
+  
+  for (v in seq(sig.num)) {
+    val.sig.corr = w.corr.mtx[[s]][v]
+    if (val.sig.corr > max.corr.1) {
+      max.corr.2 = max.corr.1
+      max.corr.1 = val.sig.corr
+      val.2 = val.1
+      val.1 = v
+    } else if (val.sig.corr > max.corr.2) {
+        max.corr.2 = val.sig.corr
+        val.2 = v
+    }
+  }
+  
+  holder.df <- data.frame(
+    discovery = paste("discovery", s, sep = " "), 
+    validation.1 = paste("validation", val.1, sep = " "), validation.1.corr = max.corr.1, 
+    validated = NA, 
+    validation.2 = paste("validation", val.2, sep = " "), validation.2.corr = max.corr.2
+  )
+  if (max.corr.1 > 0.4) {
+    holder.df$validated <- paste(celltype, validated, sep = " ")
+    validated = validated + 1
+  }
+  
+  validated.sig.df <- rbind(validated.sig.df, holder.df)
+}
+
+validated.sig.df <- validated.sig.df %>% filter(!if_all(everything(), is.na))
+```
+
+```{r}
+w.mtx <- as.matrix(w) %>% t()
+w.dist <- dist(w.mtx, method = "minkowski", p = 1) %>% as.matrix()
+w.dist[w.dist == 0] <- NA
+
+group <- str_split(colnames(w.dist), pattern = " ", simplify = T)[,1]
+# row_ha <- rowAnnotation(Group = group,
+#                         show_annotation_name = FALSE)
+# col_ha <- columnAnnotation(Group = group,
+#                            show_annotation_name = FALSE)
+
+Heatmap((w.dist), name = "Minkowski distance",
+        col = colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name = "RdYlBu")))(100),
+        cluster_rows = F, cluster_columns = F,
+        row_split = group,
+        column_split = group)
+
+sig.num = ncol(w.dist) / 2
+w.dist.mtx <- w.dist[(sig.num+1):nrow(w.dist),1:sig.num]
+pheatmap((w.dist.mtx), cluster_rows = F, cluster_cols = F)
+
+colorRamp(rev(RColorBrewer::brewer.pal(n = 7, name = "RdYlBu")))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

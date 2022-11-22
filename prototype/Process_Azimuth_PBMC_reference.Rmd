@@ -1,0 +1,68 @@
+---
+title: "process Azimuth PBMC reference"
+output: html_document
+date: '2022-07-20'
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(SeuratDisk)
+})
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+ref <- LoadH5Seurat("../data/references/archive/multi.h5seurat")
+```
+
+```{r}
+sceRef <- ref %>% as.SingleCellExperiment(assay = "SCT")
+tibble::as.tibble(colData(sceRef))
+sceRef$ref.ct.label <- sceRef$celltype.l2
+plot(sceRef$nCount_SCT, sceRef$nFeature_SCT)
+min(sceRef$nCount_SCT)
+max(sceRef$nCount_SCT)
+min(sceRef$nFeature_SCT)
+max(sceRef$nFeature_SCT)
+
+min(sceRef$nCount_RNA)
+max(sceRef$nCount_RNA)
+min(sceRef$nFeature_RNA)
+max(sceRef$nFeature_RNA)
+
+min(counts(sceRef))
+max(counts(sceRef))
+min(logcounts(sceRef))
+max(logcounts(sceRef))
+
+head(rowData(sceRef))
+```
+
+```{r}
+saveRDS(sceRef, file = "../data/references/immune-ref.rds")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

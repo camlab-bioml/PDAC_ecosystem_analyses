@@ -1,0 +1,290 @@
+---
+title: "Hwang snRNAseq process before pipeline"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(stringr)
+  library(patchwork)
+  library(DoubletFinder)
+})
+```
+
+```{r}
+sce <- readRDS("../data/sces/pipeline-output/hwang-et-al-2022-scRNASeq.rds")
+sce1 <- readRDS("../data/sces/pipeline-output/scRNASeq-manually-filtered-sce-Lee.rds")
+```
+
+```{r}
+table(sce$pid)
+```
+
+# colnames
+
+```{r}
+sce$sample <- str_split(sce$pid, "_", simplify = T)[,1]
+sce$barcode <- colnames(sce)
+colnames(sce) <- paste0(sce$sample, "-", sce$barcode)
+head(colnames(sce))
+```
+
+# gene metadata
+
+```{r}
+head(rownames(sce))
+grch38 <- annotables::grch38
+```
+
+```{r}
+sce <- sce[(rownames(sce) %in% grch38$symbol),]
+```
+
+```{r}
+head(rownames(sce))
+head(rownames(sce1))
+```
+
+## round 1
+
+```{r}
+grch38 <- grch38[(grch38$symbol %in% rownames(sce)),]
+table(grch38$symbol) %>% sort(decreasing = T) %>% head(100)
+table(rownames(sce) %in% grch38$symbol)
+```
+
+```{r}
+grch38 %>% filter(symbol == "HLA-DQB2")
+```
+
+```{r}
+table(rowData(sce)$chr) %>% sort(decreasing = T)
+table(grch38$chr) %>% sort(decreasing = T) %>% head(30)
+```
+
+## round 2
+
+```{r}
+grch38 <- grch38 %>% filter(!str_detect(chr, "CHR"))
+table(grch38$symbol) %>% sort(decreasing = T) %>% head(100)
+table(rownames(sce) %in% grch38$symbol)
+```
+
+```{r}
+grch38 %>% filter(symbol == "GAGE12F")
+grch38 %>% filter(symbol == "CCDC39")
+grch38 %>% filter(symbol == "PAK6")
+table(is.na(grch38$entrez))
+```
+
+```{r}
+genes.doublecount <- names(table(grch38$symbol))[table(grch38$symbol) > 1]
+genes.doublecount %>% sort()
+```
+
+```{r}
+grch38 %>% filter(symbol == "RGS5")
+grch38 %>% filter(symbol == "WNT3")
+grch38 %>% filter(entrez == "101929777")
+grch38 %>% filter(symbol == "CCDC39")
+```
+
+## round 3
+
+```{r}
+for (g in genes.doublecount) {
+  holder <- grch38 %>% filter(symbol == g)
+  if(!is.na(max(holder$entrez))) {
+    if (length(unique(holder$entrez)) > 1) {
+      grch38 <- grch38 %>% filter(!(entrez != min(holder$entrez) & symbol == g))
+    }
+  }
+  rm(holder)
+}
+rm(g)
+```
+
+```{r}
+table(grch38$symbol) %>% sort(decreasing = T) %>% head(30)
+table(rownames(sce) %in% grch38$symbol)
+```
+
+```{r}
+grch38 %>% filter(symbol == "MKKS")
+grch38 %>% filter(symbol == "CCDC39")
+grch38 %>% filter(symbol == "RGS5")
+grch38 %>% filter(symbol == "MATR3")
+table(is.na(grch38$entrez))
+```
+
+```{r}
+genes.doublecount <- names(table(grch38$symbol))[table(grch38$symbol) > 1]
+genes.doublecount %>% sort()
+```
+
+## round 4
+
+```{r}
+for (g in genes.doublecount) {
+  holder <- grch38 %>% filter(symbol == g)
+  
+  grch38 <- grch38 %>% filter(!(is.na(entrez) & symbol == g))
+
+  rm(holder)
+}
+rm(g)
+```
+
+```{r}
+table(grch38$symbol) %>% sort(decreasing = T) %>% head(20)
+table(rownames(sce) %in% grch38$symbol)
+```
+
+```{r}
+grch38 %>% filter(symbol == "MKKS")
+grch38 %>% filter(symbol == "ELFN2")
+grch38 %>% filter(symbol == "RGS5")
+grch38 %>% filter(symbol == "MATR3")
+table(is.na(grch38$entrez))
+```
+
+```{r}
+genes.doublecount <- names(table(grch38$symbol))[table(grch38$symbol) > 1]
+genes.doublecount %>% sort()
+```
+
+## round 5
+
+```{r}
+for (g in genes.doublecount) {
+  holder <- grch38 %>% filter(symbol == g)
+  
+  grch38 <- grch38 %>% filter(!(ensgene != min(holder$ensgene) & symbol == g))
+
+  rm(holder)
+}
+rm(g)
+```
+
+```{r}
+table(grch38$symbol) %>% sort(decreasing = T) %>% head(10)
+table(rownames(sce) %in% grch38$symbol)
+```
+
+# rownames
+
+```{r}
+rowData(sce)$chr <- NULL
+rowData(sce)$symbol <- rownames(sce)
+```
+
+```{r}
+rowData(sce) <- left_join(as.data.frame(rowData(sce)), grch38, by = "symbol")
+rowData(sce)$Symbol <- rowData(sce)$symbol
+```
+
+```{r}
+head(rownames(sce1))
+head(rownames(sce))
+```
+
+```{r}
+rownames(sce) <- paste0(rowData(sce)$ensgene, "_", rowData(sce)$Symbol)
+head(rownames(sce))
+```
+
+```{r}
+rowData(sce)$gene_strand <- rowData(sce)$strand
+rowData(sce)$gene_start <- rowData(sce)$start
+rowData(sce)$gene_end <- rowData(sce)$end
+
+rowData(sce)$strand <- NULL
+rowData(sce)$start <- NULL
+rowData(sce)$end <- NULL
+```
+
+```{r}
+saveRDS(sce, file = "../data/sces/pipeline-output/scRNASeq-manually-filtered-sce-Hwang.rds")
+```
+
+# doublet detection
+
+```{r}
+samples <- unique(sce$sample)
+samples
+```
+
+```{r}
+df.list <- lapply(8:length(samples), function(s) {
+  batch.this <- samples[s]
+  
+  sce.batch <- sce[,sce$sample == batch.this]
+  reducedDims(sce.batch) <- NULL
+  
+  seu.batch <- as.Seurat(sce.batch)
+  
+  seu.batch <- RenameAssays(seu.batch, originalexp="RNA")
+  seu.batch <- SCTransform(seu.batch)
+  seu.batch <- RunPCA(seu.batch)
+  seu.batch <- RunUMAP(seu.batch, dims = 1:10)
+  
+  sweep.res <- paramSweep_v3(seu.batch, PCs = 1:10, sct = TRUE)
+  sweep.stats <- summarizeSweep(sweep.res, GT = FALSE)
+  bcmvn <- find.pK(sweep.stats)
+  
+  # png(snakemake@output[['pK']], width = 600, height = 600)
+  #     ggplot(bcmvn, aes(x = pK, y = BCmetric, group = 1)) +
+  #         geom_point() +
+  #         geom_line() +
+  #         theme_bw() +
+  #         labs(title = snakemake@wildcards[['batch']]) +
+  #         theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  # dev.off()
+  
+  
+  # Need to cluster here as a proxy for cell types to calculate the homotypic doublet proportion
+  seu.batch <- FindNeighbors(seu.batch, dims = 1:20)
+  seu.batch <- FindClusters(seu.batch, resolution = 0.8)
+  
+  clusters <- seu.batch@meta.data$seurat_clusters
+  
+  # Returns the estimated proportion of homotypic doublets (which DoubletFinder is not sensitive to)
+  homotypic.prop <- modelHomotypic(clusters)
+  
+  doublet_rate <- as.numeric(0.036)
+  inferred_pK <- bcmvn %>% 
+    filter(BCmetric == min(BCmetric)) %>% 
+    pull(pK) %>% as.vector() %>% 
+    as.numeric()
+  
+  nExp_poi <- round(doublet_rate*nrow(seu.batch@meta.data))
+  nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
+  
+  ## Run DoubletFinder with varying classification stringencies ----------------------------------------------------------------
+  seu.batch <- doubletFinder_v3(seu.batch, PCs = 1:10, pN = 0.25, pK = inferred_pK, 
+                                nExp = nExp_poi, reuse.pANN = 'FALSE', sct = TRUE)
+  
+  seu.batch <- doubletFinder_v3(seu.batch, PCs = 1:10, pN = 0.25, pK = inferred_pK, 
+                                nExp = nExp_poi.adj, reuse.pANN = FALSE, sct = TRUE)
+  
+  df <- select(seu.batch@meta.data, starts_with(c("pANN", "DF."))) %>%
+    rownames_to_column("cell_id") %>%
+    mutate(batch = batch.this) %>%
+    mutate(params = paste0('pN-0.25_pK-', inferred_pK, '_expectedDoublets-', nExp_poi, '_expectedDoubletsAdj-', nExp_poi.adj))
+  
+  write_tsv(df, paste0("../data/doublet-detection/Hwang/DoubletFinder-", batch.this, ".tsv"))
+  
+  df
+})
+```

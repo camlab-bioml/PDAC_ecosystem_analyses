@@ -1,0 +1,130 @@
+---
+title: "Visualize LIGER signature loading profiles"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(readr)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(corrplot)
+  library(patchwork)
+})
+```
+
+```{r}
+celltype = "Mono"
+condition = "discovery"
+result_dir = paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/signature-loading-analysis/", condition, "/")
+
+H.norm.df <- read_tsv(paste0(result_dir, celltype, "-signature-loading-long-form-", condition, ".tsv"))
+sigtopfreq.df <- read_tsv(paste0(result_dir, celltype, "-signature-top-frequency-", condition, ".tsv"))
+sigloadings.df <- read_tsv(paste0(result_dir, celltype, "-signature-loading-patient-summary-", condition, ".tsv"))
+sigquantilepass.df <- read_tsv(paste0(result_dir, celltype, "-signature-activation-frequency-", condition, ".tsv"))
+```
+
+# summarized patient level signature loading information
+```{r}
+Heatmap(sigtopfreq.df %>% select(contains(condition)) %>% as.matrix() %>% t(), 
+        column_labels = sigtopfreq.df$sample, 
+        name = "freq_top_sig")
+```
+
+```{r}
+corrplot(cor(sigtopfreq.df %>% select(contains(condition)) %>% select(order(names(.))) %>% as.matrix()))
+```
+
+# plot summarised signature loadings in each patient 
+```{r}
+sigloadings.df <- H.norm.df %>%
+  group_by(cohort, sample, signature) %>%
+  summarise(mean = mean(loading), 
+            median = median(loading)) %>%
+  ungroup()
+```
+
+```{r}
+tmp.sigloadings.df <- sigloadings.df %>%
+  select(-median) %>%
+  pivot_wider(names_from = signature, values_from = mean)
+
+Heatmap(tmp.sigloadings.df %>% select(contains(condition)) %>% as.matrix() %>% t(), 
+        column_labels = tmp.sigloadings.df$sample, 
+        name = "loading_mean")
+```
+
+```{r}
+corrplot(cor(tmp.sigloadings.df %>% select(contains("Signature")) %>% as.matrix()))
+```
+
+```{r}
+tmp.sigloadings.df <- sigloadings.df %>%
+  select(-mean) %>%
+  pivot_wider(names_from = signature, values_from = median)
+
+Heatmap(tmp.sigloadings.df %>% select(contains("Signature")) %>% as.matrix() %>% t(), 
+        column_labels = tmp.sigloadings.df$sample, 
+        name = "loading_median")
+```
+
+```{r}
+corrplot(cor(tmp.sigloadings.df %>% select(contains("Signature")) %>% as.matrix()))
+```
+
+```{r}
+rm(tmp.sigloadings.df)
+```
+
+# plot frequencies of activated signatures in each sample
+```{r}
+sigquantiles75.df <- sigquantiles.df %>% filter(probs == .75)
+```
+
+```{r}
+sigquantilepass.df <- H.norm.df %>%
+  group_by(cell_id) %>%
+  mutate(passquantile = loading >= sigquantiles75.df$loading[which(sigquantiles75.df$signature == signature)]) %>%
+  ungroup()
+```
+
+```{r}
+sigquantilepass.df <- sigquantilepass.df %>%
+  select(-c(cell_id, loading)) %>%
+  group_by(cohort, sample, signature) %>%
+  dplyr::count(passquantile) %>%
+  mutate(freq = n / sum(n)) %>%
+  ungroup() %>%
+  filter(passquantile == T)
+```
+
+```{r}
+tmp.sigquantilepass.df <- sigquantilepass.df %>%
+  select(-n, -passquantile) %>%
+  pivot_wider(names_from = signature, values_from = freq) %>%
+  mutate_at(vars(contains("Signature")), ~replace(., is.na(.), 0))
+
+Heatmap(tmp.sigquantilepass.df %>% select(contains("Signature")) %>% as.matrix() %>% t(), 
+        column_labels = tmp.sigquantilepass.df$sample, 
+        name = "freq_sigpass75%")
+```
+
+```{r}
+corrplot(cor(tmp.sigquantilepass.df %>% select(contains("Signature")) %>% as.matrix()))
+```
+
+```{r}
+rm(tmp.sigquantilepass.df)
+```
+
+# correlate signature loadings across cells
+```{r}
+corrplot(cor(H.norm))
+```

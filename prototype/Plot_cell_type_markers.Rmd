@@ -1,0 +1,132 @@
+---
+title: "Plot cell type markers"
+output: html_document
+date: '2022-07-18'
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(patchwork)
+  library(SingleCellExperiment)
+  library(scater)
+  library(Nebulosa)
+})
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+seu <- readRDS("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-seu-Lee.rds")
+sce <- readRDS("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-Lee.rds")
+score_mtx <- read_tsv("../output/v2/results/Azimuth-annotation/cell-type-annotation-scores-Lee.tsv")
+```
+
+```{r}
+dimred = 'ref.umap'
+
+seu <- NormalizeData(seu)
+Idents(seu) <- paste0("predicted.", "annotation.l1")
+```
+
+```{r}
+p1 <- FeaturePlot(seu, reduction = dimred, features = "KRT19")
+p1
+p2 <- VlnPlot(seu, features = "KRT19", group.by = paste0("predicted.", "annotation.l1"), sort = F, assay = "originalexp")
+p2
+p1 + p2
+```
+
+```{r}
+dimred = 'ref.umap' %>% toupper()
+```
+
+```{r}
+p3 <- plotReducedDim(sce, dimred, by_exprs_values = "logcounts", colour_by = "KRT19")
+p3
+p4 <- plotExpression(sce, features = "KRT19", 
+                     x = paste0("predicted.", "annotation.l1"),
+                     colour_by = paste0("predicted.", "annotation.l1"), 
+                     exprs_values = "logcounts") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(x = "Cell type assigned")
+p4
+p3 + p4
+```
+
+```{r}
+head(rownames(sce))
+
+p5 <- plot_density(seu, "KRT19", slot = "data", reduction = "ref.umap", method = "ks", pal = "viridis")
+p5
+p6 <- plot_density(sce, "KRT19", slot = "logcounts", reduction = "REF.UMAP", method = "ks", pal = "viridis")
+p6
+```
+
+```{r}
+png("test.png", width = 1200, height = 1600)
+(p1 + p5) / p2
+dev.off()
+```
+
+```{r}
+png("test1.png", width = 1200, height = 1600)
+(p3 + p6) / p4
+dev.off()
+```
+
+```{r}
+png("test.png", width = 1800, height = 800)
+p1 + p5 + p2
+dev.off()
+```
+
+```{r}
+png("test1.png", width = 1800, height = 800)
+p3 + p6 + p4
+dev.off()
+```
+
+```{r}
+png("test2.png", width = 1800, height = 800)
+p1 + p6 + p4 + plot_layout(ncol = 3)
+dev.off()
+```
+
+```{r}
+cell_types <- score_mtx %>%
+  select(!matches("cell_id|cell_type")) %>% 
+  names()
+cell_types
+```
+
+```{r}
+dflist <- lapply(cell_types, function(ct) {
+  #ct <- gsub("_", "-", ct, fixed = T)
+  df <- data.frame(Expression = as.numeric(logcounts(sce["KRT19",])), 
+                   Predicted_score = as.numeric(score_mtx[[ct]]),
+                   Cell_type = ct)
+})
+df <- Reduce(bind_rows, dflist)
+```
+
+```{r}
+p7 <- ggplot(df, aes(x = Expression, y = Predicted_score)) +
+  geom_point(shape = 1) + 
+  facet_wrap(vars(Cell_type)) + 
+  ggpubr::stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~")), color = "red", geom = "label") +
+  ggpubr::theme_pubr() + 
+  labs(x = paste0("KRT19", " Expression"), y = "Predicted Score")
+p7
+```
+
+```{r}
+png("test3.png", width = 1600, height = 1600)
+p3 + p6 + p4 + p7
+dev.off()
+```
+
+```{r}
+png("test4.png", width = 1600, height = 1600)
+p1 + p6 + p4 + p7 + plot_layout(ncol = 2)
+dev.off()
+```

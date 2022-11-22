@@ -1,0 +1,255 @@
+---
+title: "Visualize LIGER signature loading analysis"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(readr)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(patchwork)
+})
+```
+
+```{r}
+celltype = "Mono"
+condition = "discovery"
+result_dir = paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/signature-loading-analysis/", condition, "/")
+
+H.norm.df <- read_tsv(paste0(result_dir, celltype, "-signature-loading-long-form-", condition, ".tsv"))
+siguniqueness.df <- read_tsv(paste0(result_dir, celltype, "-signature-loading-uniqueness-", condition, ".tsv"))
+sigmax2.df <- read_tsv(paste0(result_dir, celltype, "-signature-loading-top-two-", condition, ".tsv"))
+sigtop.df <- read_tsv(paste0(result_dir, celltype, "-signature-top-two-count-", condition, ".tsv"))
+sigtopfreq.df <- read_tsv(paste0(result_dir, celltype, "-signature-top-frequency-", condition, ".tsv"))
+
+quantiles.cohort.df <- read_tsv(paste0(result_dir, "signature-quantiles/", celltype, "-signature-loading-quantiles-cohort-", condition, ".tsv"))
+quantiles.sample.df <- read_tsv(paste0(result_dir, "signature-quantiles/", celltype, "-signature-loading-quantiles-sample-", condition, ".tsv"))
+quantiles.signature.df <- read_tsv(paste0(result_dir, "signature-quantiles/", celltype, "-signature-loading-quantiles-signature-", condition, ".tsv"))
+quantiles.signature.cohort.df <- read_tsv(paste0(result_dir, "signature-quantiles/", celltype, "-signature-loading-quantiles-signature-cohort-", condition, ".tsv"))
+quantiles.signature.sample.df <- read_tsv(paste0(result_dir, "signature-quantiles/", celltype, "-signature-loading-quantiles-signature-sample-", condition, ".tsv"))
+```
+
+# make quantile-quantile plot for signature loading
+
+```{r}
+p1 <- ggplot(H.norm.df, aes(sample = loading)) +
+  stat_qq(pch = 1) +
+  stat_qq_line(col = "steelblue", lwd = 1) +
+  labs(x = "Theoretical Quantiles", y = "Signature loadings") + 
+  theme_pubr()
+
+p2 <- ggplot(H.norm.df, aes(sample = loading)) +
+  stat_qq(pch = 1, aes(colour = signature)) +
+  stat_qq_line(col = "grey30", lwd = 1) +
+  labs(x = "Theoretical Quantiles", y = "Signature loadings",
+       col = "Signature") + 
+  theme_pubr(legend = "right")
+
+p1 + p2 + 
+  plot_annotation(title = paste0("Normal Q-Q plot for ", "Mono", " signature loadings"))
+```
+
+# plot uniqueness of signatures
+
+```{r}
+tmp.siguniqueness.df <- siguniqueness.df %>%
+  select(-signature, -loading, -loading_scaled) %>%
+  distinct()
+```
+
+```{r}
+p3 <- ggplot(tmp.siguniqueness.df, aes(x = auc, color = top, fill = top)) + 
+  geom_density(alpha = .1) + 
+  #geom_density(data = tmp.siguniqueness.df, mapping = aes(x = auc), alpha = .1, colour = "grey70") + 
+  facet_grid(second ~ top) +
+  labs(title = "AUC grouped by top signature (column) and secondary signature (row) in cells",
+       col = "Top signature", fill = "Top signature",
+       x = "AUC", y = "Density") +
+  theme_pubr()
+
+p4 <- ggplot(tmp.siguniqueness.df, aes(x = auc, color = second, fill = second)) + 
+  geom_density(alpha = .1) + 
+  #geom_density(data = tmp.siguniqueness.df, mapping = aes(x = auc), alpha = .1, colour = "grey70") + 
+  facet_wrap(~ top, scales = "free", nrow = 2) +
+  labs(col = "second top signature", fill = "second top signature", 
+       title = "AUC grouped by top signature in the cell") +
+  theme_pubr()
+
+p5 <- ggplot(tmp.siguniqueness.df, aes(x = top, y = auc, color = second)) + 
+  geom_boxplot() + 
+  #facet_wrap(~ top, scales = "free") +
+  labs(col = "second top signature", 
+       x = "Top signature",
+       y = "AUC - all signatures") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+p6 <- ggplot(tmp.siguniqueness.df, aes(x = top, y = auc)) + 
+  geom_boxplot() +
+  labs(x = "Top signature",
+       y = "AUC - all signatures") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+p7 <- ggplot(tmp.siguniqueness.df, aes(x = top, y = auc_top2, color = second)) + 
+  geom_boxplot() + 
+  #facet_wrap(~ top, scales = "free") +
+  labs(col = "second top signature", 
+       x = "Top signature",
+       y = "AUC - top 2 signatures") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+p8 <- ggplot(tmp.siguniqueness.df, aes(x = top, y = auc_top2)) + 
+  geom_boxplot() +
+  labs(x = "Top signature",
+       y = "AUC - top 2 signatures") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+p3
+p4
+(p5 / p7) + 
+  plot_annotation(title = "AUC for scaled signature loading") + 
+  plot_layout(guides = "collect") & theme(legend.position = "right")
+(p6 / p8) +
+  plot_annotation(title = "AUC for scaled signature loading")
+```
+
+```{r}
+rm(tmp.siguniqueness.df)
+```
+
+# plot quantiles for each cohort
+
+```{r}
+quantiles.cohort.df$probs <- as.character(quantiles.cohort.df$probs)
+
+p9 <- ggplot(quantiles.cohort.df, aes(x = cohort, y = loading, fill = probs)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(y = "Loading", x = "Cohort", fill = "Quantile") + 
+  theme_pubr()
+```
+
+# plot quantiles for each sample
+
+```{r}
+quantiles.sample.df$probs <- as.character(quantiles.sample.df$probs)
+
+p10 <- ggplot(quantiles.sample.df, aes(x = sample, y = loading, fill = probs)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(y = "Loading", x = "Sample", fill = "Quantile") + 
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+# plot quantiles for each signature
+
+```{r}
+quantiles.signature.df$probs <- as.character(quantiles.signature.df$probs)
+
+p11 <- ggplot(quantiles.signature.df, aes(x = signature, y = loading, fill = probs)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(y = "Loading", x = "Signature", fill = "Quantile") + 
+  theme_pubr()
+```
+
+```{r}
+((p9 + p11) / p10) + 
+  plot_layout(guides = "collect") & theme(legend.position = "right")
+```
+
+# plot quantiles for each signature and cohort
+
+```{r}
+quantiles.signature.cohort.df$probs <- as.character(quantiles.signature.cohort.df$probs)
+
+p12 <- ggplot(quantiles.signature.cohort.df, aes(x = signature, y = loading, color = probs)) + 
+  geom_boxplot() + 
+  labs(x = "Signature", y = "Signature loading", col = "Quantile") + 
+  theme_pubr()
+```
+
+# plot quantiles for each signature and sample
+
+```{r}
+quantiles.signature.sample.df$probs <- as.character(quantiles.signature.sample.df$probs)
+
+p13 <- ggplot(quantiles.signature.sample.df, aes(x = signature, y = loading, color = probs)) + 
+  geom_boxplot() + 
+  labs(x = "Signature", y = "Signature loading", col = "Quantile") + 
+  theme_pubr()
+```
+
+```{r}
+(p12 + p13) + 
+  plot_layout(guides = "collect") & theme(legend.position = "top")
+```
+
+# plot highest loaded signature in each cell
+
+```{r}
+p14 <- ggplot(sigmax2.df, aes(x = signature, y = loading, color = rank, fill = rank)) + 
+  geom_boxplot(alpha = .3) + 
+  facet_wrap(~ cohort, nrow = 2) +
+  labs(col = "Signature rank", fill = "Signature rank",
+       y = "Loading", x = NULL) + 
+  theme_pubr() + 
+  theme(axis.text.x = element_blank())
+```
+
+```{r}
+p15 <- ggplot(sigmax2.df, aes(x = signature, y = gap, color = rank, fill = rank)) + 
+  geom_boxplot(alpha = .3) + 
+  facet_wrap(~ cohort, nrow = 2) +
+  labs(col = "Signature rank", fill = "Signature rank",
+       y = "Loading gap", x = "Signature") + 
+  theme_pubr(x.text.angle = 45)
+```
+
+```{r}
+(p14 / p15) + 
+  plot_layout(guides = "collect") & theme(legend.position = "right")
+```
+
+# plot number of top signatures in each sample
+
+```{r}
+p16 <- ggplot(sigtop.df, aes(x = rank, y = n, color = rank, fill = rank)) + 
+  geom_boxplot(alpha = .3) + 
+  facet_wrap(~ signature, scales = "free") +
+  labs(col = "Signature rank", fill = "Signature rank",
+       y = "Number of cells", x = "Signature") + 
+  theme_pubr(x.text.angle = 45)
+```
+
+```{r}
+p16
+```
+
+# plot frequency of top signatures in each sample
+
+```{r}
+tmp.sigtopfreq.df <- sigtopfreq.df %>%
+  pivot_longer(cols = contains(condition), names_to = "signature", values_to = "freq")
+```
+
+```{r}
+p17 <- ggplot(tmp.sigtopfreq.df, aes(x = sample, y = freq, fill = signature)) + 
+  geom_bar(position = "stack", stat = "identity") + 
+  #facet_wrap(~ cohort, scales = "free") +
+  labs(fill = "Signature",
+       y = "Frequency as top signature", x = "Sample") + 
+  theme_pubr(x.text.angle = 45)
+```
+
+```{r}
+p17
+```

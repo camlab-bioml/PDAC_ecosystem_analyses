@@ -1,0 +1,88 @@
+---
+title: "Visualize SingleR output"
+output: html_document
+date: '2022-07-21'
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(SingleCellExperiment)
+  library(scuttle)
+  library(scater)
+  library(SingleR)
+  library(ggrepel)
+  library(ggpubr)
+})
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+predNew <- readRDS("../output/v2/results/SingleR-annotation/immune/DFrame/immune-cell-type-prediction-Lee.rds")
+sceNew <- readRDS("../output/v2/data/SingleR-annotation/immune/sceRNASeq-SingleR-annotated-immune-sce-Lee.rds")
+```
+
+```{r}
+png("Lee.png", width = 800, height = 1200)
+plotScoreHeatmap(predNew, 
+                 show.pruned = T, 
+                 show.labels = T)
+dev.off()
+```
+
+```{r}
+summary(is.na(predNew$pruned.labels))
+```
+
+```{r}
+png("Lee.png", width = 1200, height = 800)
+plotDeltaDistribution(predNew,
+                      show = "delta.med",
+                      ncol = 8)
+dev.off()
+```
+
+```{r}
+png("Lee.png", width = 1200, height = 800)
+plotScoreDistribution(predNew,
+                      ncol = 8)
+dev.off()
+```
+
+```{r}
+all.markers <- metadata(predNew)$de.genes
+tibble::as.tibble(colData(sceNew))
+
+# cell-related markers
+lapply(names(all.markers), function(cell_type) {
+  plotHeatmap(sceNew,
+              order_columns_by = "singler.pruned.label",
+              features = unique(unlist(all.markers[[cell_type]])))
+})
+```
+
+```{r}
+holder <- structure(colorRampPalette(RColorBrewer::brewer.pal(12, "Set3"))(length(unique(colData(sceNew)[['singler.pruned.label']]))), 
+                                                 names = unique(colData(sceNew)[['singler.pruned.label']]))
+```
+
+```{r}
+png("Lee.png", width = 800, height = 2400)
+plotHeatmap(sceNew, 
+            color_columns_by = "singler.pruned.label",
+            column_annotation_colors = list(singler.pruned.label = holder),
+            order_columns_by = "singler.pruned.label",
+            features = unique(unlist(all.markers$`CD14 Mono`)),
+            show_colnames = F)
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+

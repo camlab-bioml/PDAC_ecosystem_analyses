@@ -1,0 +1,77 @@
+---
+title: "Azimuth cell type assignment"
+output: html_document
+date: '2022-07-12'
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(SeuratData)
+  library(Azimuth)
+})
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# available data from SeuratData
+```{r}
+available_data <- AvailableData()
+available_data[grep("Azimuth", available_data$Summary),]
+```
+
+```{r}
+sce <- readRDS("../output/v2/data/process-sce/scRNASeq-filtered-sce-Lee.rds")
+head(rownames(sce))
+rowData(sce)[['ensembl_id']] <- str_split(rownames(sce), "_", simplify = T)[,1]
+rowData(sce) %>% head()
+
+gene_names <- rowData(sce)[["Symbol"]] %>% make.unique()
+rownames(sce) <- gene_names
+
+exprs_mtx <- counts(sce)
+rownames(exprs_mtx) <- gene_names
+counts(sce) <- exprs_mtx
+
+exprs_mtx <- logcounts(sce)
+rownames(exprs_mtx) <- gene_names
+logcounts(sce) <- exprs_mtx
+
+rm(exprs_mtx)
+
+seu <- as.Seurat(sce, counts = "counts", data = "logcounts", project = "SingleCellExperiment")
+#seu <- RenameAssays(object = seu, originalexp = 'RNA')
+```
+
+```{r}
+seu <- RunAzimuth(query = seu, reference = "pancreasref", assay = "originalexp")
+```
+
+```{r}
+sce_annot <- as.SingleCellExperiment(seu, assay = "originalexp")
+rowData(sce_annot) <- seu@assays$originalexp@meta.features
+colData(sce_annot) <- colData(sce_annot) %>% 
+  as.data.frame() %>% 
+  select(!contains(c("ident", "_originalexp", "_refAssay", "_RNA", "percent.mt"))) %>%
+  as("DataFrame")
+```
+
+```{r}
+head(rownames(sce_annot))
+head(rowData(sce_annot)$ensembl_id)
+head(rowData(sce_annot)$Symbol)
+
+grep("RGS5", rownames(sce_annot), value = T)
+
+plot(counts(sce["RGS5",]), counts(sce["RGS5.1",]))
+```
+
+```{r}
+holder <- seu@assays[[paste0("prediction.score.annotation.", "l1")]]@data %>% t() %>% as.data.frame()
+holder$cell_id <- rownames(holder)
+write_tsv(holder, file = "test.tsv")
+```
+
+
+
+
+

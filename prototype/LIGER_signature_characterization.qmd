@@ -1,0 +1,157 @@
+---
+title: "Liger signature characterization"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(stringr)
+  library(ComplexHeatmap)
+  library(pheatmap)
+  library(patchwork)
+  library(SingleCellExperiment)
+  library(ggVennDiagram)
+  library(ggvenn)
+  library(clusterProfiler)
+})
+```
+
+```{r}
+celltype <- "Mono"
+condition <- "validated"
+```
+
+```{r}
+df.sig <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", 
+                          celltype, 
+                          "/loading-matrices/", 
+                          celltype, 
+                          "-signature-loading-", 
+                          condition, 
+                          ".tsv"))
+sce <- readRDS(paste0("../output/v2/data/cohort-discovery-validation-grouping/", 
+                      celltype, 
+                      "/scRNAseq-", 
+                      celltype, 
+                      "-sce-discovery.rds"))
+```
+
+```{r}
+table(df.sig$cell_id %in% colnames(sce))
+```
+
+```{r}
+ct.labels <- colData(sce) %>% as.data.frame() %>% select(singler.label)
+ct.labels$cell_id <- rownames(ct.labels)
+```
+
+```{r}
+df <- left_join(df.sig, ct.labels, by = "cell_id")
+df <- df %>% pivot_longer(starts_with(celltype), names_to = "signature", values_to = "loading")
+```
+
+```{r}
+ggplot(df, aes(x = singler.label, y = loading, fill = signature)) + 
+  geom_boxplot() + 
+  theme_pubr()
+```
+
+# find common signature genes across cell types 
+```{r}
+celltypes <- read_csv("../resources/cell-type-signature/signature-extraction/parameterlist.csv")
+```
+
+```{r}
+celltypes <- celltypes %>% filter(celltype != "stellate")
+celltypes <- celltypes$celltype
+```
+
+```{r}
+df.sig.list <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", 
+                  ct, 
+                  "/loading-matrices/", 
+                  ct, 
+                  "-gene-loading-", 
+                  condition, 
+                  ".tsv"))
+})
+names(df.sig.list) <- celltypes
+```
+
+```{r}
+genes.sig <- lapply(df.sig.list, function(df.sig) {
+  df.sig$gene
+})
+```
+
+```{r}
+genes.common <- Reduce(intersect, genes.sig)
+```
+
+```{r}
+df.sig.common.genes.list <- lapply(df.sig.list, function(df.sig) {
+  df.sig[(df.sig$gene %in% genes.common),]
+})
+```
+
+```{r}
+df.sig.common.genes <- Reduce(function(x, y) {inner_join(x, y, by = "gene")}, df.sig.common.genes.list)
+```
+
+```{r}
+genes <- str_split(df.sig.common.genes$gene, "_", simplify = T)[,1]
+df.sig.common.genes$gene <- NULL
+mtx.sig.common.genes <- as.matrix(df.sig.common.genes)
+rownames(mtx.sig.common.genes) <- genes
+rm(genes)
+```
+
+```{r}
+png("test9.png", width = 25, height = 10, units = "in", res = 300)
+pheatmap(t(log1p(mtx.sig.common.genes)), name = "log gene loading")
+dev.off()
+```
+
+```{r}
+ggVennDiagram(genes.sig[c(1, 2, 3, 8)], label_alpha = 0.3)
+```
+
+```{r}
+ggvenn(genes.sig[c(1, 2, 3, 8)],
+       fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+       stroke_size = 0.5, set_name_size = 4)
+```
+
+```{r}
+ans.go <- enrichGO(gene = str_split(genes.common, "_", simplify = T)[,2], 
+                   ont = "BP",
+                   OrgDb = "org.Hs.eg.db",
+                   keyType = "ENSEMBL",
+                   universe = readRDS("../output/v2/results/LIGER/signature-analysis/ductal/enrichment-analysis/ductal-signature-geneuniverse-validated.rds"),
+                   minGSSize = 10,
+                   maxGSSize = 500,
+                   readable=TRUE,
+                   pvalueCutoff = 0.01,
+                   pAdjustMethod = "BH")
+```
+
+```{r}
+png("test10.png", width = 7, height = 7, units = "in", res = 300)
+barplot(ans.go, showCategory=10) + ggtitle("GO enrichment, 169 common genes")
+dev.off()
+```
+
+
+
+
+
+

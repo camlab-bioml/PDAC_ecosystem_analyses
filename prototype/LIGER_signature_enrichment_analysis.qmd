@@ -1,0 +1,171 @@
+---
+title: "LIGER signature enrichment analysis"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(rliger)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(stringr)
+  library(ComplexHeatmap)
+  library(clusterProfiler)
+  library(enrichplot)
+  library(patchwork)
+})
+```
+
+```{r}
+celltype = "activated_stellate"
+```
+
+```{r}
+discovery <- readRDS(paste0("../output/v2/results/LIGER/signature-extraction/LIGER-object/", celltype, "/", celltype, "-liger-discovery.rds"))
+validation <- readRDS(paste0("../output/v2/results/LIGER/signature-extraction/LIGER-object/", celltype, "/", celltype, "-liger-validation.rds"))
+sces <- readRDS(paste0("../output/v2/data/cohort-discovery-validation-grouping/", celltype, "/scRNAseq-", celltype, "-scelist-discovery.rds"))
+```
+
+```{r}
+w.discovery <- discovery@W
+w.validation <- validation@W
+
+rownames(w.discovery) <- paste0("discovery ", seq(nrow(w.discovery)))
+rownames(w.validation) <- paste0("validation ", seq(nrow(w.validation)))
+```
+
+```{r}
+w.discovery <- w.discovery %>% t() %>% as.data.frame()
+w.validation <- w.validation %>% t() %>% as.data.frame()
+```
+
+```{r}
+w.discovery$gene <- rownames(w.discovery)
+w.validation$gene <- rownames(w.validation)
+
+w <- full_join(w.discovery, w.validation, by = "gene")
+rownames(w) <- w$gene
+
+w$gene <- NULL
+w.discovery$gene <- NULL
+w.validation$gene <- NULL
+```
+
+```{r}
+geneuniverse <- lapply(sces, rownames)
+geneuniverse <- Reduce(intersect, geneuniverse)
+geneuniverse <- str_split(geneuniverse, "_", simplify = T)[,2]
+```
+
+```{r}
+degenes <- lapply(names(w), function(sig) {
+  genes <- rownames(w)[w[[sig]] != 0 & !is.na(w[[sig]])]
+  str_split(genes, "_", simplify = T)[,2]
+})
+```
+
+```{r}
+library(org.Hs.eg.db)
+deGenes <- lapply(degenes, function(genes) {
+  unlist(mget(genes, envir=org.Hs.egENSEMBL2EG,
+              ifnotfound = NA))
+})
+
+geneUniverse <- unlist(mget(geneuniverse, envir=org.Hs.egENSEMBL2EG,
+                       ifnotfound = NA))
+
+detach("package:org.Hs.eg.db", unload = TRUE)
+```
+
+```{r}
+sigs = seq(10)
+
+ans.gse.list <- lapply(sigs, function(i) {
+  geneList <- w.discovery[[i]]
+  names(geneList) <- str_split(rownames(w.discovery), "_", simplify = T)[,2]
+  geneList <- geneList %>% sort(decreasing = T)
+  head(geneList)
+  
+  ans.gse <- gseGO(geneList,
+                   OrgDb = "org.Hs.eg.db",
+                   keyType = "ENSEMBL",
+                   ont = "BP", 
+                   minGSSize = 10,
+                   maxGSSize = Inf,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = "BH",
+                   verbose = T,
+                   seed = F,
+                   by = "fgsea")
+  
+  tab.gse <- as.data.frame(ans.gse)
+  tab.gse <- tab.gse %>%
+    filter(p.adjust < 0.01) %>%
+    arrange(desc(NES))
+  
+  tab.gse$Description <- factor(tab.gse$Description, levels = tab.gse$Description[order(tab.gse$NES)])
+  
+  p <- ggplot(tab.gse[1:20,], aes(x = NES, y = Description, fill = p.adjust)) + 
+    geom_bar(stat = "identity") + 
+    scale_fill_viridis_c() + 
+    labs(title = paste0("Signature ", i))
+  ggsave(paste0("signature-", i, "-gse.png"), p, width = 7, height = 8, units = "in")
+  
+  ans.gse
+})
+
+#gseaplot2(ans.gse, geneSetID = tab.gse$ID[1], title = tab.gse$Description[1])
+```
+
+```{r}
+plist <- lapply(sigs, function(i) {
+  ans.go <- enrichGO(gene = deGenes[[i]], 
+                     ont = "BP",
+                     OrgDb = "org.Hs.eg.db",
+                     universe = geneUniverse,
+                     readable=TRUE,
+                     pvalueCutoff = 0.01,
+                     pAdjustMethod = "BH")
+  #tab.go <- as.data.frame(ans.go)
+  #tab.go<- subset(tab.go, Count>5)
+  #tab.go[1:5, 1:6]
+  
+  ans.kegg <- enrichKEGG(gene = deGenes[[i]],
+                         organism = 'hsa',
+                         universe = geneUniverse,
+                         pvalueCutoff = 0.05,
+                         pAdjustMethod = "BH")
+  #tab.kegg <- as.data.frame(ans.kegg)
+  #tab.kegg<- subset(tab.kegg, Count>5)
+  #tab.kegg[1:5, 1:6]
+  
+  p1 <- barplot(ans.go, showCategory=10)
+  ggsave(paste0("signature-", i, "-go.png"), p1, width = 7, height = 7, units = "in")
+  
+  p2 <- dotplot(ans.kegg, showCategory=20) + ggtitle("KEGG")
+  ggsave(paste0("signature-", i, "-kegg.png"), p2, width = 7, height = 8, units = "in")
+  
+  p1 + p2
+})
+
+```
+
+```{r}
+p3 <- upsetplot(ans.go)
+ggsave("signature-1.png", p3, width = 10, height = 10, units = "in")
+p3
+```
+
+```{r}
+p4 <- emapplot(ans.go)
+p4
+```

@@ -1,0 +1,104 @@
+---
+title: "Visualize LIGER output"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(rliger)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+})
+```
+
+```{r}
+liger <- readRDS("../output/v2/results/LIGER/signature-extraction/LIGER-object/Mono/Mono-liger-discovery.rds")
+```
+
+# visualization of LIGER results
+
+```{r}
+all.plots <- plotByDatasetAndCluster(liger, axis.labels = c('UMAP 1', 'UMAP 2'), return.plots = T)
+ggsave("test.png", all.plots[[1]] + all.plots[[2]], width = 12, height = 7, units = "in")
+```
+
+```{r}
+datasets <- lapply(liger@raw.data, ncol) %>% unlist() %>% sort(decreasing = T) 
+dataset1 <- names(datasets)[1]
+dataset2 <- names(datasets)[1]
+
+gene_loadings <- plotGeneLoadings(liger, 
+                                  dataset1 = dataset1,
+                                  dataset2 = dataset2,
+                                  do.spec.plot = FALSE, 
+                                  return.plots = TRUE)
+lapply(seq(length(gene_loadings)), function(i) {
+  ggsave(paste0("signature-", i, ".png"), gene_loadings[[i]], width = 7, height = 8, units = "in")
+})
+```
+
+```{r}
+cluster.markers <- runWilcoxon(liger, compare.method = "clusters")
+```
+
+```{r}
+cluster.markers <- cluster.markers[cluster.markers$padj < 0.05,]
+cluster.markers <- cluster.markers[cluster.markers$logFC > 3,]
+```
+
+```{r}
+cluster.markers.list <- lapply(unique(cluster.markers$group), function(group) {
+  wilcoxon.cluster.markers <- cluster.markers[cluster.markers$group == group, ]
+  wilcoxon.cluster.markers <- wilcoxon.cluster.markers[order(wilcoxon.cluster.markers$padj), ]
+  top.markers <- wilcoxon.cluster.markers[1:20, ]
+  top.markers
+})
+```
+
+```{r}
+liger <- runTSNE(liger)
+```
+
+```{r}
+marker_loadings <- plotGene(liger, use.raw = F, liger@var.genes[2], axis.labels = c('UMAP 1', 'UMAP 2'), return.plots = T)
+ggsave("ISG15.png", marker_loadings[[1]] + marker_loadings[[2]] + marker_loadings[[3]] + marker_loadings[[4]], width = 10, height = 10, units = "in")
+```
+
+```{r}
+H.norm <- liger@H.norm
+colnames(H.norm) <- paste("Signature", seq(ncol(H.norm)), sep = " ")
+annotation_row <- data.frame(cohort = liger@cell.data$dataset)
+rownames(annotation_row) <- rownames(H.norm)
+annotation_col <- setNames(pal_jco()(length(unique(annotation_row$cohort))), unique(annotation_row$cohort))
+col_fun = colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name = "RdYlBu")))(100)
+Heatmap(H.norm, 
+        col = col_fun,
+        show_row_names = F,
+        name = "signature loading",
+        right_annotation = rowAnnotation(df = annotation_row, 
+                                         col = list(cohort = annotation_col)))
+# pheatmap(H.norm, show_colnames = T, show_rownames = F, main = "signature loading", annotation_row = annotation_row)
+```
+
+```{r}
+W <- liger@W
+rownames(W) <- paste("Signature", seq(nrow(W)), sep = " ")
+p <- pheatmap(W, show_colnames = F, main = "gene loading")
+p
+```
+
+```{r}
+png("test1.png", width = 12, height = 7, units = "in", res = 300)
+p
+dev.off()
+```

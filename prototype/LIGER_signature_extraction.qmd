@@ -1,0 +1,81 @@
+---
+title: "LIGER signature extraction"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(rliger)
+  library(sjstats)
+  library(tidyr)
+})
+```
+
+```{r}
+sces <- readRDS("../output/v2/data/cohort-discovery-validation-grouping/Mono/scRNAseq-Mono-scelist-discovery.rds")
+sces <- readRDS("../output/v2/data/cohort-discovery-validation-grouping/Mono/scRNAseq-Mono-scelist-validation.rds")
+genes <- lapply(sces, rownames)
+
+Reduce(intersect, genes) %>% length()
+```
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  sce[!grepl("^RP[LS]|^MT-", rownames(sce)),]
+})
+grepl("^RP[LS]|^MT-", rownames(sces$Toronto)) %>% table()
+
+genes <- lapply(sces, rownames)
+Reduce(intersect, genes) %>% length()
+```
+
+```{r}
+count_mtxlist <- lapply(sces, counts)
+```
+
+```{r}
+# Liger remove non-expressing genes in each cohort
+liger <- createLiger(count_mtxlist,
+                     take.gene.union = F,
+                     remove.missing = T)
+```
+
+```{r}
+liger <- normalize(liger)
+```
+
+```{r}
+liger <- selectGenes(liger, 
+                     var.thresh = 0.1,
+                     alpha.thresh = 0.99,
+                     combine = "union",
+                     unshared = F, 
+                     unshared.datasets = NULL, 
+                     unshared.thresh= NULL,
+                     do.plot = T)
+
+# only do this for validation group to ensure same list of genes is used for signature extraction
+intersect(liger@norm.data[[1]]@Dimnames[[1]], liger.holder@var.genes) %>% length()
+liger@var.genes <- intersect(liger@norm.data[[1]]@Dimnames[[1]], liger.holder@var.genes)
+```
+
+```{r}
+# Liger removes cells with no gene expression
+liger <- scaleNotCenter(liger,
+                        remove.missing = T)
+```
+
+```{r}
+liger <- optimizeALS(liger, k = 7, lambda = 5, rand.seed = 1)
+liger <- quantile_norm(liger, ref_dataset = NULL)
+liger <- louvainCluster(liger)
+liger <- runUMAP(liger, distance = 'cosine', n_neighbors = 30, min_dist = 0.3)
+```

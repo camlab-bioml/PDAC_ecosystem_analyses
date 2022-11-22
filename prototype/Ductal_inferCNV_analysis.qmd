@@ -1,0 +1,211 @@
+---
+title: "Ductal_inferCNV_analysis"
+format: html
+editor: visual
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(infercnv)
+  library(Matrix)
+  library(here)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(scales)
+  library(gridExtra)
+  library(bluster)
+})
+```
+
+```{r}
+sce.tumor <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-Toronto.rds")
+sce.normal.peng <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-PengNormTissue.rds")
+#sce.normal.steele <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-SteeleNormTissue.rds")
+```
+
+```{r}
+#common.gene <- intersect(rownames(sce.normal.peng), rownames(sce.normal.steele))
+#sce.normal.peng <- sce.normal.peng[common.gene,]
+#sce.normal.steele <- sce.normal.steele[common.gene,]
+#sce.normal <- cbind(sce.normal.peng, sce.normal.steele)
+sce.normal <- sce.normal.peng
+rm(sce.normal.peng)
+```
+
+```{r}
+sce.tumor.subsampled <- sce.tumor#[,sample(colnames(sce.tumor), 10000)]
+sce.normal <- sce.normal#[,sample(colnames(sce.normal), 10000)]
+table(sce.tumor.subsampled$predicted.annotation.l1)
+```
+
+```{r}
+sce.normal$cell_type <- "Normal"
+sce.tumor.subsampled$cell_type <- sce.tumor.subsampled$predicted.annotation.l1
+sce.tumor.subsampled$cell_type <- plyr::mapvalues(sce.tumor.subsampled$cell_type, 
+                                                  from = c("alpha", "beta", "delta", "gamma", "activated_stellate", "quiescent_stellate"),
+                                                  to = c("endocrine", "endocrine", "endocrine", "endocrine", "stellate", "stellate"))
+table(sce.tumor.subsampled$cell_type)
+```
+
+```{r}
+common.coldata <- intersect(names(colData(sce.normal)), names(colData(sce.tumor.subsampled)))
+```
+
+```{r}
+colData(sce.normal) <- colData(sce.normal)[,common.coldata]
+colData(sce.tumor.subsampled) <- colData(sce.tumor.subsampled)[,common.coldata]
+
+reducedDims(sce.normal) <- NULL
+reducedDims(sce.tumor.subsampled) <- NULL
+```
+
+```{r}
+head(rownames(sce.tumor.subsampled))
+head(rownames(sce.normal))
+
+rownames(sce.normal) <- paste(rowData(sce.normal)[['Symbol']], rowData(sce.normal)[['ensembl_id']], sep = "_")
+rownames(sce.tumor.subsampled) <- paste(rowData(sce.tumor)[['Symbol']], rowData(sce.tumor.subsampled)[['ensembl_id']], sep = "_")
+
+common.gene <- intersect(rownames(sce.normal), rownames(sce.tumor.subsampled))
+sce.normal <- sce.normal[common.gene,]
+sce.tumor.subsampled <- sce.tumor.subsampled[common.gene,]
+
+rownames(sce.normal) <- str_split(rownames(sce.normal), pattern = "_", simplify = T)[,1]
+rownames(sce.tumor.subsampled) <- str_split(rownames(sce.tumor.subsampled), pattern = "_", simplify = T)[,1]
+
+#common.gene <- intersect(rowData(sce.normal)[['ensembl_id']], rowData(sce.tumor.subsampled)[['ensembl_id']])
+#sce.normal <- sce.normal[rowData(sce.normal)[['ensembl_id']] %in% common.gene,]
+#sce.tumor.subsampled <- sce.tumor.subsampled[rowData(sce.tumor.subsampled)[['ensembl_id']] %in% common.gene,]
+
+sce.combined <- cbind(sce.tumor.subsampled, sce.normal)
+```
+
+```{r}
+counts.mtx <- counts(sce.combined)
+length(grep("_", (rownames(counts.mtx))))
+head(rownames(counts.mtx))
+#rownames(counts.mtx) <- rownames(counts.mtx)
+ncol(counts.mtx)
+nrow(counts.mtx)
+```
+
+```{r}
+colData(sce.combined)[,'cell_type', drop=F]
+
+write.table(colData(sce.combined)[,'cell_type', drop=F], 'test_classes.txt', sep="\t", col.names=FALSE, quote = FALSE)
+```
+
+```{r}
+order_csv <-  read.csv("../resources/gencode_v19_gen_pos.complete.txt", sep = '\t', header=FALSE)
+order_csv$V1 <- sapply(lapply(lapply(order_csv$V1, strsplit, "|", fixed=TRUE), '[[',1),'[',1)
+order_csv <- order_csv[!duplicated(order_csv$V1),,drop=FALSE]
+
+
+write.table(order_csv, "test_gene_order.txt", sep="\t", col.names=FALSE, row.names=FALSE, quote = FALSE)
+```
+
+```{r}
+infer <- CreateInfercnvObject(
+        raw_counts_matrix= counts.mtx,
+        delim="\t",
+        annotations_file= "test_classes.txt",
+        gene_order_file= "test_gene_order.txt",
+        ref_group_names= c("Normal"))
+```
+
+```{r}
+infercnv_obj <- infercnv::run(
+        infer,
+        cutoff = 0.1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+        out_dir = "infercnv-hmm/",
+        cluster_by_groups = T, 
+        plot_steps = T,
+        denoise = T,
+        HMM = T,
+        HMM_type = "i6",
+        analysis_mode = "subclusters",
+        tumor_subcluster_partition_method: "leiden",
+        no_prelim_plot = T,
+        num_threads = 16, 
+        png_res = 360,
+        resume_mode = T
+    )
+```
+
+```{r}
+#The infercnv_object has the following attributes, we are insterested in the processed expression data in "expr.data"
+names(attributes(infercnv_obj))
+```
+
+```{r}
+# Finding the indices of all non-reference cells
+all_indices <- infercnv_obj@observation_grouped_cell_indices
+all_indices$Normal <- NULL
+all_tumour_indices <- unlist(unname(all_indices))
+```
+
+```{r}
+#Create dataframe with expression variance for each cell
+infer_cnv_frame <- infercnv_obj@expr.data[,all_tumour_indices]
+vars <-colVars(infer_cnv_frame)
+vars_df <- data.frame(colnames(infer_cnv_frame), vars)
+rownames(vars_df) <- vars_df$colnames.infer_cnv_frame.
+vars_df$colnames.infer_cnv_frame. <- NULL
+```
+
+```{r}
+# Taking those cells found in our orignial dataset so we can compare
+sce.tumor.results <- sce.tumor.subsampled[, rownames(vars_df)]
+colData(sce.tumor.results)$infer_cnv_var <-vars_df$vars
+```
+
+```{r}
+sce.tumor.results <- scater::runPCA(sce.tumor.results)
+sce.tumor.results <- scater::runUMAP(sce.tumor.results)
+```
+
+```{r}
+p <- plotReducedDim(sce.tumor.results, "UMAP", colour_by="infer_cnv_var")
+p <- p + scale_colour_continuous(name = "infer_cnv_var", type = "viridis", limits=c(0.000,0.01), oob=squish)
+gridExtra::grid.arrange(
+    p,
+    plotReducedDim(sce.tumor.results, "UMAP", colour_by="cell_type"),
+    ncol=2
+    )
+```
+
+```{r}
+nn.clusters <- clusterCells(sce.tumor.results, use.dimred="PCA", BLUSPARAM=NNGraphParam(k=40))
+colLabels(sce.tumor.results) <- nn.clusters
+gridExtra::grid.arrange(
+    plotReducedDim(sce.tumor.results,"UMAP", colour_by="label"),
+    plotReducedDim(sce.tumor.results, "UMAP", colour_by="cell_type"),
+    ncol=2
+)
+```
+
+```{r}
+cluster_scores <- aggregate(colData(sce.tumor.results)$infer_cnv_var, list(colData(sce.tumor.results)$label),FUN=mean)
+cluster_scores[order(cluster_scores$x),][1:10,"x", drop=FALSE]
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
+
+
+

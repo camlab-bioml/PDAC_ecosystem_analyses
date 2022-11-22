@@ -1,0 +1,151 @@
+---
+title: "Visualize LIGER output - gene loading"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(rliger)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+})
+```
+
+```{r}
+liger <- readRDS("../output/v2/results/LIGER/signature-extraction/LIGER-object/Mono/Mono-liger-discovery.rds")
+```
+
+# visualization of LIGER results
+
+```{r}
+genes.to.check <- c("CD68", "CD163", 
+                    "IL4I1", 
+                    "FOLR2", "LYVE1", 
+                    "MARCO", 
+                    "SPP1", "NLRP3", 
+                    "APOE", "TREM2", "CCR2", 
+                    "VCAN", 
+                    "ISG15", "CXCL9", 
+                    "FCN1", "FCGR3A", "S100A8", "S100A9")
+```
+
+```{r}
+Heatmap(log1p(liger@W[,grep("CD68|CD163|IL4I1|FOLR2|LYVE1|MARCO|SPP1|NLRP3|APOE|TREM2|CCR2|VCAN|ISG15|CXCL9|FCN1|FCGR3A|S100A8|S100A9", colnames(liger@W))]), 
+        row_labels = paste0("Signature ", seq(nrow(liger@W))), 
+        name = "gene loading")
+```
+
+```{r}
+Steele_cluster_markers <- list(
+  granulocyte = c('CXCR2', 'FCGR3B', 'IFITM2', 'SLC25A37', 'IL1R2', 'CXCR1', 'S100A8', 'SIRPA'), 
+  classical_monocyte = c('LYZ', 'CCR2', 'LGALS2', 'MPEG1', 'CD36', 'CX3CR1', 'CLEC12A'), 
+  resident_macrophage = c('RGS1', 'HLA-DPA1', 'CD74', 'C1QC', 'FCGBP', 'SEPP1', 'CSF1R', 'TREM2', 'S100A4'), 
+  alternatively_activated_macrophage_1 = c('CD40', 'SPP1', 'MARCO', 'APOE', 'CHIT1', 'FABP5', 'CCL18', 'HLA-DQA1', 'COX17', 'LY6E'), 
+  alternatively_activated_macrophage_2 = c('LAMP1', 'HAVCR2', 'SERPINB6', 'IL18', 'CCL2', 'ATF5', 'CXCL3', 'VEGFB', 'SLC2A1')
+)
+
+WNT_proteins <- c("WNT4", "WNT2B", "WNT9A", "WNT3A", "WNT6", "WNT10A", "WNT7A", "WNT5A", 
+                  "WNT2", "WNT16", "WNT11", "WNT5B", "WNT10B", "WNT1", "WNT3", "WNT9B", "WNT7B")
+Wnt_signaling <- c("FZD1", "FZD7", "FZD10", "LGR5", "LRP6", "RNF43", "CSNK1A1", "GSK3B", "AXIN1", "APC", "CTNNB1", 
+                   "LEF1", "TCF7", "TCF7L1", "TCF7L2", "TLE1")
+MHC_class_II <- c("HLA-DPA1", "HLA-DPB1", "HLA-DMB", "HLA-DMA", "HLA-DOB", "HLA-DOA", 
+                  "HLA-DQA1", "HLA-DQB1", "HLA-DQA2", "HLA-DQB2", "HLA-DRA", "HLA-DRB5", "HLA-DRB1")
+TAM_markers <- list(
+  TAM = c("ITGAM", "CSF1R", "ADGRE1"), 
+  metastasis = c("FLT1", "CCR2", "CXCR4", "TEK"), 
+  invasion_intravasation = c(Wnt_signaling, "CTSS", "CTSB", "EGF"), 
+  resistance_to_therapy = c("CXCR4", "TEK"), 
+  stem_cell_maintenance = WNT_proteins, 
+  immune_regulation = c("ARG1", "ARG2", "MARCO", "IL10", "CCL22", MHC_class_II), 
+  inflammation = c("IL12A", MHC_class_II, "NOS2", "TNF", "CD80", "CD86"), 
+  angiogenesis = c("FLT1", "VEGFA", "TEK", "CXCR4", "CTSB", "CTSS")
+)
+
+lapply(TAM_markers, function(x) write.table(data.frame(x), 'test.csv', append = T, sep = ","))
+```
+
+```{r}
+w <- read_tsv("../output/v2/results/LIGER/signature-analysis/Mono/loading-matrices/Mono-gene-loading.tsv")
+```
+
+```{r}
+w$gene <- str_split(w$gene, pattern = "_", simplify = T)[,1]
+length(unique(w$gene))
+w <- w %>%
+  distinct(gene, .keep_all = T)
+gene.holder <- w$gene
+w$gene <- NULL
+rownames(w) <- gene.holder
+rm(gene.holder)
+```
+
+```{r}
+markerlists <- read_csv("../resources/markers/known_signature_markers/Mono/Steele_cluster_marker_list.csv")
+```
+
+```{r}
+row_split <- sapply(seq(length(markerlists)), function(i) {
+  name <- names(markerlists)[i]
+  markers <- markerlists[[i]][!is.na(markerlists[[i]])]
+  rep(name, length(markers))
+}) %>% Reduce(c, .)
+```
+
+```{r}
+w.markers <- lapply(markerlists, function(markers) {
+  markers <- markers[!is.na(markers)]
+  w.markers.mtx <- w[match(markers, rownames(w)),] %>% as.matrix()
+  rownames(w.markers.mtx) <- markers
+  w.markers.mtx
+})
+```
+
+```{r}
+w.markers <- Reduce(rbind, w.markers)
+```
+
+```{r}
+w.markers <- w.markers %>% as.data.frame()
+w.markers$split <- row_split
+w.markers <- w.markers %>%
+  drop_na(!split)
+
+row_split <- w.markers$split
+w.markers$split <- NULL
+w.markers <- as.matrix(w.markers)
+```
+
+```{r}
+col_ha <- columnAnnotation(group = str_split(colnames(w.markers), pattern = " ", simplify = T)[,1])
+```
+
+```{r}
+heatmap <- Heatmap(w.markers, 
+                   name = "gene loading", 
+                   cluster_rows = T, 
+                   row_split = row_split, 
+                   row_title_rot = 90,
+                   row_title_gp = gpar(fontsize = 12),
+                   bottom_annotation = col_ha)
+```
+
+```{r}
+png("test2.png", width = 7, height = 18, units = "in", res = 300)
+draw(heatmap,
+     merge_legend = T)
+dev.off()
+```
+
+```{r}
+
+```

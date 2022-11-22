@@ -1,0 +1,82 @@
+---
+title: "Cohort discovery validation grouping"
+format: 
+  html:
+    code-fold: true
+    code-tools: true
+    code-link: true
+    df-print: paged
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(stringr)
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+})
+```
+
+```{r}
+sceLee <- readRDS("../output/v2/data/subset-sce/immune/Mono/scRNASeq-Mono-sce-Lee.rds")
+sceLin <- readRDS("../output/v2/data/subset-sce/immune/Mono/scRNASeq-Mono-sce-Lin.rds")
+
+scelist <- list(sceLee, sceLin)
+
+cohorts <- str_split(string = c("../output/v2/data/subset-sce/immune/Mono/scRNASeq-Mono-sce-Lee.rds",
+                                "../output/v2/data/subset-sce/immune/Mono/scRNASeq-Mono-sce-Lin.rds"), 
+                     pattern  = "-sce-", simplify = T)[,2]  
+cohorts <- str_split(string = cohorts, pattern = ".rds", simplify = T)[,1]
+
+names(scelist) <- cohorts
+```
+
+```{r}
+#| echo: false
+num_of_cells <- lapply(seq_along(scelist), function(i) {
+  cohort = names(scelist)[[i]]
+  sce = scelist[[i]]
+  holder <- as.data.frame(table(sce$sample))
+  names(holder) = c("sample", "ncells")
+  holder$cohort = cohort
+  
+  holder
+})
+num_of_cells <- Reduce(bind_rows, num_of_cells)
+
+num_of_cells %>% filter(cohort %in% c("Lin"))
+```
+
+```{r}
+table(sceLee$singler.label)
+table(sceLee$singler.pruned.label)
+table(sceLee$singler.first.label)
+```
+
+```{r}
+scelistsub <- scelist[c("Lee")]
+```
+
+```{r}
+scelist <- lapply(scelist, function(sce) {
+  rownames(sce) <- paste(rownames(sce), rowData(sce)[['ensembl_id']], sep = "_")
+  sce
+})
+geneslist <- lapply(scelist, rownames)
+common_genes <- Reduce(intersect, geneslist)
+
+scelist <- lapply(scelist, function(sce) {
+  sce <- sce[common_genes,]
+  #rowData(sce)[['chr']] <- NULL
+  #rowData(sce)[['gene_start']] <- NULL
+  #rowData(sce)[['gene_end']] <- NULL
+  #rowData(sce)[['gene_strand']] <- NULL
+  sce
+})
+sce <- Reduce(cbind, scelist)
+```

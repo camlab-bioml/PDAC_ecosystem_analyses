@@ -1,0 +1,65 @@
+---
+title: "Combine LIGER parameter sweep metrics"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(tidyr)
+  library(stringi)
+  library(readr)
+})
+```
+
+```{r}
+file.list <- list.files(path = "../output/v2/results/LIGER/parameter-sweep/metrics/CD4/validation/",
+                        pattern = "*.tsv",
+                        full.names = T,
+                        recursive = T)
+```
+
+```{r}
+tsvlist <- lapply(file.list, read_tsv)
+```
+
+```{r}
+tsv_combined <- Reduce(bind_rows, tsvlist) %>%
+  drop_na() %>%
+  mutate(parameter = stri_split_fixed(as.character(parameter), "_")) %>%
+  unnest(parameter) %>%
+  mutate(parameter = stri_trim_both(parameter)) %>%
+  separate(parameter, into = c("var", "val"), sep = ":") %>%
+  spread(var, val)
+```
+
+```{r}
+tsv_combined <- Reduce(bind_rows, tsvlist) %>%
+  drop_na() %>%
+  mutate(parameter = stri_split_fixed(as.character(parameter), "_")) %>%
+  unnest(parameter) %>%
+  mutate(parameter = stri_trim_both(parameter)) %>%
+  separate(parameter, into = c("param", "val"), sep = ":")
+
+params <- unique(tsv_combined$param)
+
+tsv_combined <- tsv_combined %>%
+  pivot_wider(names_from = param, values_from = val) %>%
+  unnest(params)
+```
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,170 @@
+---
+title: "Liger lambda and K selection"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(rliger)
+  library(ggpubr)
+  library(sjstats)
+  library(tidyr)
+})
+```
+
+```{r}
+celltype = "quiescent_stellate"
+
+sces_discovery <- readRDS(paste0("../output/v2/data/cohort-discovery-validation-grouping/", celltype, "/scRNAseq-", celltype, "-scelist-discovery.rds"))
+genes_discovery <- lapply(sces_discovery, rownames)
+
+Reduce(intersect, genes_discovery) %>% length()
+```
+
+```{r}
+discovery <- lapply(sces_discovery, counts)
+```
+
+```{r}
+# Liger remove non-expressing genes in each cohort
+discovery.liger <- createLiger(discovery, take.gene.union = F, remove.missing = T)
+```
+
+```{r}
+discovery.liger <- rliger::normalize(discovery.liger)
+```
+
+```{r}
+discovery.liger <- selectGenes(discovery.liger, 
+                               var.thresh = 0.1,
+                               alpha.thresh = 0.99,
+                               combine = "union",
+                               unshared = T, 
+                               unshared.datasets = list(4), 
+                               unshared.thresh= 0.4,
+                               do.plot = T)
+```
+
+```{r}
+# Liger removes cells with no gene expression
+discovery.liger <- scaleNotCenter(discovery.liger, remove.missing = T)
+```
+
+```{r}
+discovery.liger <- optimizeALS(discovery.liger, lambda = 5, use.unshared = F, max.iters = 30, thresh = 1e-10, k = 6, rand.seed = 1)
+discovery.liger <- quantile_norm(discovery.liger, ref_dataset = NULL, knn_k = 9)
+discovery.liger <- louvainCluster(discovery.liger)
+```
+
+```{r}
+suggestK(discovery.liger,
+         k.test = seq(2, 9, 1),
+         lambda = 5,
+         thresh = 1e-04,
+         max.iters = 100,
+         num.cores = 16,
+         rand.seed = 1,
+         nrep = 1,
+         plot.log2 = T,
+         return.data = F,
+         return.raw = F)
+```
+
+```{r}
+suggestLambda(discovery.liger,
+              k = 9,
+              lambda.test = seq(1, 5, 1),
+              rand.seed = 1,
+              num.cores = 16,
+              thresh = 1e-04,
+              max.iters = 100,
+              knn_k = 9,
+              return.data = F,
+              return.raw = F)
+```
+
+```{r}
+seed = sample(1:200, 3, replace = FALSE)
+```
+
+# K sweep
+
+```{r}
+alignment_score = list()
+for (iter in seed){
+  K_values = seq(from = 2, to = 20)
+  for (i in K_values){
+    discovery.liger <- optimizeALS(discovery.liger,  lambda = 5 , use.unshared = TRUE, max.iters = 30, thresh=1e-10, k =i, rand.seed = iter)
+    discovery.liger <- quantile_norm(discovery.liger, ref_dataset = NULL)
+    discovery.liger <- louvainCluster(discovery.liger)
+    new_alignment = calcAlignment(discovery.liger)
+    names(new_alignment) = paste0("Seed:", iter, "_K:",i)
+    alignment_score = append(alignment_score, new_alignment)
+  }
+}
+alignment_score_selecting_k <- alignment_score
+```
+
+```{r}
+align_df = data.frame(alignment_score)
+align_df = data.frame(t(align_df))
+colnames(align_df) = "Alignment_Score"
+align_df$details = rownames(align_df)
+align_df = separate(data = align_df , col = details, into = c("Seed", "K"), sep = "_")
+
+ggline(align_df, x = "K", y = "Alignment_Score", add = "mean_se", palette = "jco",lwd =2) +
+  xlab("K-Value") + 
+  ylab("Alignment Score") + 
+  ggtitle("Selecting K")
+```
+
+# Lambda sweep
+
+```{r}
+alignment_score = list()
+for (iter in seed){
+  lambda_values = seq(1, 5, 1)
+  for (i in lambda_values){
+    discovery.liger <- optimizeALS(discovery.liger,  lambda = i , use.unshared = TRUE, max.iters = 30, thresh=1e-10, k =30, rand.seed = iter)
+    discovery.liger <- quantile_norm(discovery.liger, ref_dataset = NULL)
+    discovery.liger <- louvainCluster(discovery.liger)
+    new_alignment = calcAlignment(discovery.liger)
+    names(new_alignment) = paste0("Seed:", iter, "_Lambda:",i)
+    alignment_score = append(alignment_score, new_alignment)
+  }
+}
+alignment_score_selecting_lambda <- alignment_score
+```
+
+```{r}
+align_df = data.frame(alignment_score)
+align_df = data.frame(t(align_df))
+colnames(align_df) = "Alignment_Score"
+align_df$details = rownames(align_df)
+align_df = separate(data = align_df , col = details, into = c("Seed", "Lambda"), sep = "_")
+
+ggline(align_df, x = "Lambda", y = "Alignment_Score", add = "mean_se", palette = "jco",lwd =2) +
+  xlab("Lambda Value") + ylab("Alignment Score") + ggtitle("Selecting Lambda")
+```
+
+# prototype code
+
+```{r}
+new_agreement = calcAgreement(discovery.liger, dr.method = "NMF", ndims = 6, k = 8, use.aligned = T, rand.seed = 42, by.dataset = F)
+new_alignment = calcAlignment(discovery.liger, rand.seed = 42, by.dataset = T)
+new_normloadings = calcNormLoadings(discovery.liger)
+names(discovery.liger@raw.data)
+names(new_alignment) <- names(discovery.liger@raw.data)
+names(seed) <- c("a", "b", "c")
+holder <- c(new_alignment, seed)
+holder
+holder <- holder %>% as.matrix() %>% t() %>% as.data.frame()
+```
