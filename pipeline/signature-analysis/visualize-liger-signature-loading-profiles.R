@@ -13,6 +13,7 @@ suppressPackageStartupMessages({
 sig.profiles <- read_tsv(snakemake@input[['sig_profiles']])
 condition <- snakemake@wildcards[['condition']]
 if (condition == "validated") condition = snakemake@wildcards[['subtype']]
+if (condition == "collapsed") condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
 profile.flavour <- snakemake@wildcards[['profile']]
 
 # construct the profile heatmap

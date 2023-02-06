@@ -33,6 +33,21 @@ rule visualize_azimuth_output:
 	script:
 		'cell-type-assignment/visualize-azimuth-output.R'
 
+rule visualize_all_azimuth_output:
+	input:
+		sces = expand(dataoutput + 'Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-{cohort}.rds', cohort = cohorts_together)
+	params:
+		dimred_to_plot = config['azimuth']['redim_to_plot'],
+		annot_level = config['azimuth']['annotation_level'],
+	output:
+		umap_celltype = figureoutput + 'Azimuth-annotation/annotated-dimred/cohort-combined-plots/UMAP-celltype-all-cohorts.png',
+		umap_cohort = figureoutput + 'Azimuth-annotation/annotated-dimred/cohort-combined-plots/UMAP-cohort-all-cohorts.png',
+	resources:
+		mem_mb = 10000
+	threads: 2
+	script:
+		'cell-type-assignment/visualize-all-azimuth-output.R'
+
 rule plot_cell_type_markers:
 	input: 
 		seu = dataoutput + 'Azimuth-annotation/scRNASeq-Azimuth-assigned-seu-{cohort}.rds',

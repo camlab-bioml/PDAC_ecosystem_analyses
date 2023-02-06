@@ -72,20 +72,24 @@ infer <- CreateInfercnvObject(
 
 # run inferCNV
 infercnv_obj <- infercnv::run(
-  infer,
+  infercnv_obj = infer,
   cutoff = 0.1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+  min_cells_per_gene = 3,
+  window_length = 101,
   out_dir = out.dir,
   cluster_by_groups = T, 
   plot_steps = F,
   denoise = T,
-  HMM = F,
+  HMM = T,
   HMM_type = "i6",
   analysis_mode = "samples",
   tumor_subcluster_partition_method = "leiden",
   no_prelim_plot = T,
   num_threads = as.numeric(snakemake@threads), 
-  png_res = 320,
-  resume_mode = T
+  png_res = 321,
+  resume_mode = T,
+  save_rds = F,
+  save_final_rds = T
 )
 
 

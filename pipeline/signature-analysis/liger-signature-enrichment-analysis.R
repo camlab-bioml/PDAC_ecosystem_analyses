@@ -13,8 +13,12 @@ geneuniverse <- readRDS(snakemake@input[['geneuniverse']])
 condition = snakemake@wildcards[['condition']]
 signature.id = snakemake@params[['signature']] %>% as.numeric()
 if (condition == "validated") {
-  w <- read_tsv(snakemake@input[['validated_gene_loading_mtx']])
+  w <- read_tsv(snakemake@input[['gene_loading_mtx_validated']])
   condition = snakemake@wildcards[['subtype']]
+  signature.id = min(signature.id, length(grep(condition, names(w), value = T)))
+} else if (condition == "collapsed") {
+  w <- read_tsv(snakemake@input[['gene_loading_mtx_collapsed']])
+  condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
   signature.id = min(signature.id, length(grep(condition, names(w), value = T)))
 }
 
@@ -45,7 +49,7 @@ ans.gse <- tryCatch({
         keyType = "ENSEMBL",
         ont = "BP", 
         minGSSize = 10,
-        maxGSSize = Inf,
+        maxGSSize = as.numeric(snakemake@params[['gsea_maxGSSize']]),
         pvalueCutoff = 0.01,
         pAdjustMethod = "BH",
         verbose = T,
@@ -59,7 +63,7 @@ ans.gse <- tryCatch({
         keyType = "ENSEMBL",
         ont = "BP", 
         minGSSize = 20,
-        maxGSSize = Inf,
+        maxGSSize = as.numeric(snakemake@params[['gsea_maxGSSize']]),
         pvalueCutoff = 0.01,
         pAdjustMethod = "BH",
         verbose = T,

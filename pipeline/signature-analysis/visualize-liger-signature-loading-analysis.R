@@ -18,6 +18,7 @@ sigtopfreq.df <- read_tsv(snakemake@input[['sig_top_freq']])
 
 condition <- snakemake@wildcards[['condition']] 
 if (condition == "validated") condition = snakemake@wildcards[['subtype']]
+if (condition == "collapsed") condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
 
 # make quantile-quantile plot for signature loading
 p1 <- ggplot(H.norm.df, aes(sample = loading)) +

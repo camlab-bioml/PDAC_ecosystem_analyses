@@ -23,3 +23,5 @@ Heatmap(t(w.mtx),
         name = "Gene loading",
         left_annotation = row_ha)
 dev.off()
+
+

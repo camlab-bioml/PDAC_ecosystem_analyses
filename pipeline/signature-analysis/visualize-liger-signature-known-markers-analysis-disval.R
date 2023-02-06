@@ -5,7 +5,6 @@ suppressPackageStartupMessages({
   library(ggpubr)
   library(tidyr)
   library(ComplexHeatmap)
-  library(GeneOverlap)
 })
 
 w.markers <- read_tsv(snakemake@input[['sig_known_gene_loading_mtx']])
@@ -52,47 +51,13 @@ heatmap_cleaned <- Heatmap(w.markers.cleaned,
                            bottom_annotation = col_ha)
 
 # save the plots
-png(snakemake@output[['sig_known_gene_loading_plot_full']], width = 7, height = 18, units = "in", res = 321)
+png(snakemake@output[['sig_known_gene_loading_plot_full']], width = 7, height = 18, units = "in", res = 300)
 draw(heatmap_full,
      merge_legend = T)
 dev.off()
 
-png(snakemake@output[['sig_known_gene_loading_plot_cleaned']], width = 7, height = 18, units = "in", res = 321)
+png(snakemake@output[['sig_known_gene_loading_plot_cleaned']], width = 7, height = 18, units = "in", res = 300)
 draw(heatmap_cleaned,
      merge_legend = T)
 dev.off()
 
-
-# plot GOM (heatmaps) ----------------------------------------------------------
-gom.obj <- readRDS(snakemake@input[['sig_gom']])
-pval.cutoff <- as.numeric(snakemake@params[['pvalue_cutoff_for_overlap_test']])
-
-png(snakemake@output[['sig_gom_plot_oddsratio']], width = 10, height = 10, units = "in", res = 321)
-tryCatch({
-  drawHeatmap(gom.obj, 
-              what = "odds.ratio", 
-              log.scale = T, 
-              adj.p = T, 
-              cutoff = pval.cutoff, 
-              ncolused = 5, 
-              grid.col = "Blues", 
-              note.col = "black")
-}, error = function(e) {
-  par(mar=c(0,0,0,0))
-  plot(c(0, 1), c(0, 1), ann = F, bty = 'n', type = 'n', xaxt = 'n', yaxt = 'n')
-  text(x = 0.5, y = 0.5, 
-       paste("drawHeatmap() encountered this error:\n", e), 
-       cex = 1, col = "black", family = "serif", font = 2, adj = 0.5)
-})
-dev.off()
-
-png(snakemake@output[['sig_gom_plot_jaccardindex']], width = 10, height = 10, units = "in", res = 321)
-drawHeatmap(gom.obj, 
-            what = "Jaccard", 
-            log.scale = T, # does not work for Jaccard index
-            adj.p = T, 
-            cutoff = pval.cutoff, 
-            ncolused = 5, 
-            grid.col = "Oranges", 
-            note.col = "black")
-dev.off()

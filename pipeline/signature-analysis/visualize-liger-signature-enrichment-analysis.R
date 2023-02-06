@@ -18,8 +18,12 @@ ans.kegg <- readRDS(snakemake@input[['overrepresentation_kegg']])
 condition = snakemake@wildcards[['condition']]
 signature = snakemake@params[['signature']] %>% as.numeric()
 if (condition == "validated") {
-  w <- read_tsv(snakemake@input[['validated_gene_loading_mtx']])
+  w <- read_tsv(snakemake@input[['gene_loading_mtx_validated']])
   condition = snakemake@wildcards[['subtype']]
+  signature = min(signature, length(grep(condition, names(w), value = T)))
+} else if (condition == "collapsed") {
+  w <- read_tsv(snakemake@input[['gene_loading_mtx_collapsed']])
+  condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
   signature = min(signature, length(grep(condition, names(w), value = T)))
 }
 

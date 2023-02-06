@@ -10,7 +10,7 @@ ntop <- snakemake@params[['num_top_genes']] %>% as.numeric()
 
 w$gene <- str_split(w$gene, pattern = "_", simplify = T)[,1]
 
-print(paste0("number of unique genes in ", snakemake@wildcards[['condition']], " ", snakemake@wildcards[['subtype']], " signatures:"))
+print(paste0("number of unique genes in ", snakemake@wildcards[['subtype']], " signatures:"))
 print(length(unique(w$gene)))
 
 w <- w %>%
@@ -34,4 +34,5 @@ w.top.genes <- w.top.genes %>% as.data.frame()
 w.top.genes$gene <- top.genes
 
 write_tsv(w.top.genes, file = snakemake@output[['sig_top_gene_loading_mtx']])
+
 

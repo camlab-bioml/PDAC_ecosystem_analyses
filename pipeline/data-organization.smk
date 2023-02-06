@@ -1,9 +1,10 @@
-rule cohort_discovery_validation_grouping:
+rule cohort_discovery_validation_grouping_and_sample_filtering:
 	input:
 		sce = lambda wildcards: expand(get_subsetted_sce_dir(wildcards.subtype, dataoutput, celltype_hierarchy) + 'scRNAseq-' + wildcards.subtype + '-sce-{cohort}.rds', cohort = discovery_cohorts + validation_cohorts)
 	params:
 		cohorts_discovery = discovery_cohorts,
 		cohorts_validation = validation_cohorts,
+		sample_cell_count_thres = config['liger']['sample_cell_count_thres'],
 	output:
 		sce_discovery = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNAseq-{subtype}-sce-discovery.rds',
 		sce_validation = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNAseq-{subtype}-sce-validation.rds',

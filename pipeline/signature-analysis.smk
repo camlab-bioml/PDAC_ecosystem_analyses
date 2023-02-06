@@ -48,15 +48,56 @@ rule extract_validated_liger_signatures:
 	script:
 		'signature-analysis/extract-validated-liger-signatures.R'
 
-rule liger_signature_top_gene_loading_analysis:
+rule liger_signature_collapse:
+	input:
+		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
+		sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-validated.tsv',
+		signature_collapse_guide = config['signatures']['signature_collapse_guide'],
+	params:
+		
+	output:
+		collapsed_sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-collapsed.tsv',
+		collapsed_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
+		sig_collapse_namemap = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-collapse-name-mapping.tsv',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/liger-signature-collapse.R'
+
+rule liger_signature_top_gene_loading_analysis_disval:
 	input:
 		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
-		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
 	params:
 		num_top_genes = config['signatures']['num_top_genes'],
 	output:
 		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.tsv',
-		sig_top_gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-validated.tsv',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/liger-signature-top-gene-loading-analysis-disval.R'
+
+rule visualize_liger_signature_top_gene_loading_analysis_disval:
+	input:
+		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.tsv',
+	params:
+		
+	output:
+		sig_top_gene_loading_heatmap = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.png',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/visualize-liger-signature-top-gene-loading-analysis-disval.R'
+
+rule liger_signature_top_gene_loading_analysis:
+	input:
+		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-{condition}.tsv',
+	params:
+		num_top_genes = config['signatures']['num_top_genes'],
+	output:
+		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.tsv',
 	resources:
 		mem_mb = 1000
 	threads: 1
@@ -65,28 +106,52 @@ rule liger_signature_top_gene_loading_analysis:
 
 rule visualize_liger_signature_top_gene_loading_analysis:
 	input:
-		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.tsv',
-		sig_top_gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-validated.tsv',
+		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.tsv',
 	params:
 		
 	output:
-		sig_top_gene_loading_heatmap = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.png',
-		sig_top_gene_loading_heatmap_validated = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-validated.png',
+		sig_top_gene_loading_heatmap = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.png',
 	resources:
 		mem_mb = 1000
 	threads: 1
 	script:
 		'signature-analysis/visualize-liger-signature-top-gene-loading-analysis.R'
 
-rule liger_signature_known_markers_analysis:
+rule liger_signature_known_markers_analysis_disval:
 	input:
 		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
-		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
 		marker_list = config['signatures']['known_signature_markers_dir'] + '{subtype}/{marker_list}' + config['signatures']['known_signature_markers_file_pattern'],
 	params:
 	output:
 		sig_known_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading.tsv',
-		sig_known_gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-validated.tsv',
+	resources: 
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/liger-signature-known-markers-analysis-disval.R'
+
+rule visualize_liger_signature_known_markers_analysis_disval:
+	input:
+		sig_known_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading.tsv',
+	params:
+	output:
+		sig_known_gene_loading_plot_full = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-full.png',
+		sig_known_gene_loading_plot_cleaned = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-cleaned.png',
+	resources: 
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/visualize-liger-signature-known-markers-analysis-disval.R'
+
+rule liger_signature_known_markers_analysis:
+	input:
+		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-{condition}.tsv',
+		marker_list = config['signatures']['known_signature_markers_dir'] + '{subtype}/{marker_list}' + config['signatures']['known_signature_markers_file_pattern'],
+	params:
+		num_top_genes_for_overlap_test = config['signatures']['num_top_genes_for_overlap_test'],
+	output:
+		sig_known_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-{condition}.tsv',
+		sig_gom = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-overlap/{subtype}-{marker_list}-geneoverlap-matrix-{condition}.rds',
 	resources: 
 		mem_mb = 1000
 	threads: 1
@@ -95,14 +160,15 @@ rule liger_signature_known_markers_analysis:
 
 rule visualize_liger_signature_known_markers_analysis:
 	input:
-		sig_known_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading.tsv',
-		sig_known_gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-validated.tsv',
+		sig_known_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-{condition}.tsv',
+		sig_gom = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-overlap/{subtype}-{marker_list}-geneoverlap-matrix-{condition}.rds',
 	params:
+		pvalue_cutoff_for_overlap_test = config['signatures']['pvalue_cutoff_for_overlap_test'],
 	output:
-		sig_known_gene_loading_plot_full = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-full.png',
-		sig_known_gene_loading_plot_cleaned = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-cleaned.png',
-		sig_known_gene_loading_plot_full_validated = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-full-validated.png',
-		sig_known_gene_loading_plot_cleaned_validated = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-cleaned-validated.png',
+		sig_known_gene_loading_plot_full = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-full-{condition}.png',
+		sig_known_gene_loading_plot_cleaned = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-loading/{subtype}-{marker_list}-gene-loading-cleaned-{condition}.png',
+		sig_gom_plot_oddsratio = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-overlap/{subtype}-{marker_list}-geneoverlap-oddsratio-{condition}.png',
+		sig_gom_plot_jaccardindex = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/known-markers-overlap/{subtype}-{marker_list}-geneoverlap-jaccardindex-{condition}.png',
 	resources: 
 		mem_mb = 1000
 	threads: 1
@@ -125,10 +191,12 @@ rule liger_signature_enrichment_analysis_extract_geneuniverse:
 rule liger_signature_enrichment_analysis:
 	input:
 		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
-		validated_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
+		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
+		gene_loading_mtx_collapsed = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
 		geneuniverse = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/{subtype}-signature-geneuniverse-{condition}.rds',
 	params:
 		signature = '{k}',
+		gsea_maxGSSize = config['signatures']['gsea_maxGSSize'],
 	output:
 		overrepresentation_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-GO.rds',
 		overrepresentation_kegg = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-KEGG.rds',
@@ -144,7 +212,8 @@ rule visualize_liger_signature_enrichment_analysis:
 		overrepresentation_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-GO.rds',
 		overrepresentation_kegg = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-KEGG.rds',
 		gsea_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-GO.rds',
-		validated_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
+		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
+		gene_loading_mtx_collapsed = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
 	params:
 		signature = '{k}',
 	output:
