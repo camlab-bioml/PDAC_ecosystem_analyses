@@ -14,29 +14,86 @@ suppressPackageStartupMessages({
   library(DT) # CRAN
   library(magrittr)
   library(stats)
-  library(argparse)
   library(gdata)
+  library(posterior)
   library(bayesplot)
   library(jtools)
   library(cowplot)
-  library(rstan)
+  library(cmdstanr)
 })
 ```
 
 # load stan fit object
-
 ```{r}
-fit.stan <- readRDS("Stan/stan_fit/stanFit.rds")
+stan.data <- readRDS("Stan/stanData.rds")
+fit.stan <- readRDS("Stan/fit/stanFit.rds")
 ```
 
 ```{r}
-sig.num <- 6
+sig.num = stan.data$K
 ```
 
 ```{r}
-traceplot(fit.stan, pars = paste0("lambda[1",",",1:sig.num,"]"))
-traceplot(fit.stan, pars = paste0("beta[",1:sig.num,"]"))
-pairs(fit.stan, pars = c("beta"))
+traceplot(fit.stan, pars = paste0("miuP[1",",",1:sig.num,"]"))
+#traceplot(fit.stan, pars = paste0("beta[",1:sig.num,"]"))
+#pairs(fit.stan, pars = c("sigmaI"))
+```
+
+```{r}
+summary.fit <- summary(fit.stan)
+as_tibble(summary.fit$summary)
+```
+
+```{r}
+fit.optim$summary()
+
+holder <- fit.optim$draws(variables = "Y_mono", format = "matrix")
+holder <- matrix(holder, nrow = stan.data$N_mono)
+
+holder1 <- fit.optim$draws(variables = "Y_act_ste", format = "matrix")
+holder1 <- matrix(holder1, nrow = stan.data$N_act_ste)
+
+colnames(holder) <- paste("Mono", seq(1:ncol(holder)), sep = " ")
+colnames(holder1) <- paste("Activated_stellate", seq(1:ncol(holder1)), sep = " ")
+
+stan.data$y_mono <- holder
+stan.data$y_act_ste <- holder1
+```
+
+```{r}
+Heatmap(scale(holder), cluster_columns = F, cluster_rows = F)
+Heatmap(scale(stan.data$y_mono), cluster_columns = F, cluster_rows = F)
+```
+
+```{r}
+summary.sigmaE <- summary(fit.stan, pars = c("sigmaE"))$summary
+summary.sigmaI <- summary(fit.stan, pars = c("sigmaI"))$summary
+
+summary.sigmaE <- fit.optim$summary(variables = c("sigmaE"), "mean", "sd")
+summary.sigmaI <- fit.optim$summary(variables = c("sigmaI"), "mean", "sd")
+```
+
+```{r}
+sigmaE <- matrix(summary.sigmaE[,c("mean")], nrow = 6, ncol = 6)
+sigmaI <- matrix(summary.sigmaI[,c("mean")], nrow = 6, ncol = 6)
+
+sigmaE <- matrix(summary.sigmaE$estimate, nrow = 6, ncol = 6)
+sigmaI <- matrix(summary.sigmaI$estimate, nrow = 6, ncol = 6)
+```
+
+```{r}
+corE <- cov2cor(sigmaE)
+corI <- cov2cor(sigmaI)
+
+colnames(corE) <- paste(celltype, 1:ncol(corE), sep = " ")
+rownames(corE) <- paste(celltype, 1:nrow(corE), sep = " ")
+colnames(corI) <- paste(celltype, 1:ncol(corI), sep = " ")
+rownames(corI) <- paste(celltype, 1:nrow(corI), sep = " ")
+```
+
+```{r}
+pheatmap(corE, main = paste0("cov2cor(sigmaE)"))
+pheatmap(corI, main = paste0("cov2cor(sigmaI)"))
 ```
 
 ```{r}

@@ -11,9 +11,6 @@ suppressPackageStartupMessages({
   library(sjstats)
   library(ggpubr)
   library(tidyr)
-  library(ComplexHeatmap)
-  library(circlize)
-  library(dendextend)
 })
 ```
 
@@ -57,128 +54,17 @@ summary(sigprofile.mtx %>% c())
 ```
 
 ```{r}
-row_ha <- rowAnnotation(Cohort = sigprofile.df$cohort)
-col_ha <- columnAnnotation(Celltype = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
-```
-
-```{r}
-png("test.png", width = 12, height = 7, units = "in", res = 300)
-Heatmap(sigprofile.mtx %>% scale(), 
-        name = "Norm sig-loading",
-        #left_annotation = row_ha, 
-        row_split = sigprofile.df$cohort,
-        #top_annotation = col_ha,
-        column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
-dev.off()
-```
-
-```{r}
 sigprofile.corr <- cor(sigprofile.mtx, use = "complete.obs")
 ```
 
-```{r}
-png("test1.png", width = 12, height = 12, units = "in", res = 300)
-corrplot(corr = sigprofile.corr)
-dev.off()
-```
-
-# patient profile for the top frequency flavor
+# patient profile for the top frequency flavor (long form)
 ```{r}
 sigprofile.df.long <- sigprofile.df %>%
   pivot_longer(cols = !contains("cohort") & !contains("sample"), names_to = "signature", values_to = "freq") %>%
   mutate(celltype = str_split(signature, pattern = " ", simplify = T)[,1])
 ```
 
-```{r}
-p.test <- ggplot(sigprofile.df.long, aes(x = sample, y = freq, fill = signature)) + 
-  geom_bar(position = "stack", stat = "identity") + 
-  facet_wrap(~ celltype, ncol = 1, scales = "free") +
-  theme_pubr(x.text.angle = 45) + 
-  theme(axis.text.x = element_blank(),
-        legend.position = "right")
-```
-
-```{r}
-png("test5.png", height = 15, width = 10, units = "in", res = 300)
-p.test
-dev.off()
-```
-
-# circlized heatmap
-```{r}
-sigprofile.mtx.circ <- sigprofile.mtx %>% scale() %>% t()
-colnames(sigprofile.mtx.circ) <- sigprofile.df$cohort
-
-col_fun1 = colorRamp2(c(-4, -3, -2, -1, 0, 1, 2, 3, 4), c("#4575b4", "#74add1", "#abd9e9", "#e0f3f8", "#ffffbf", "#fee090", "#fdae61", "#f46d43", "#d73027"))
-split <- (rownames(sigprofile.mtx.circ) %>% str_split(., pattern = " ", simplify = T))[,1] 
-dend_col = structure(1:length(unique(split)), names = unique(split))
-
-match(unique(colnames(sigprofile.mtx.circ)), colnames(sigprofile.mtx.circ))
-```
-
-```{r}
-png("test3.png", width = 7, height = 7, units = "in", res = 360)
-circos.par(gap.after = c(rep(3, length(unique(split))-1), 15))
-
-circos.heatmap.initialize(sigprofile.mtx.circ,
-                          split = split,
-                          dend.callback = function(dend, m, si) {
-                            # when k = 1, it renders one same color for the whole dendrogram
-                            color_branches(dend, k = 1, col = dend_col[si])
-                          })
-
-circos.heatmap(sigprofile.mtx.circ[,1:5], 
-               col = col_fun1,
-               #show.sector.labels = T,
-               track.height = 0.1,
-               rownames.side = "outside")
-circos.track(track.index = get.current.track.index(), panel.fun = function(x, y) {
-  if(CELL_META$sector.numeric.index == length(unique(split))) { # the last sector
-    circos.rect(CELL_META$cell.xlim[2] + convert_x(1, "mm"), 0,
-                CELL_META$cell.xlim[2] + convert_x(5, "mm"), 5,
-                col = "#FF731D", border = NA)
-    circos.text(CELL_META$cell.xlim[2] + convert_x(3, "mm"), 2.5,
-                "Lee", cex = 0.5, facing = "clockwise")
-  }
-}, bg.border = NA)
-
-circos.heatmap(sigprofile.mtx.circ[,6:13], track.height = 0.1, col = col_fun1)
-circos.track(track.index = get.current.track.index(), panel.fun = function(x, y) {
-  if(CELL_META$sector.numeric.index == length(unique(split))) { # the last sector
-    circos.rect(CELL_META$cell.xlim[2] + convert_x(0.9, "mm"), 0,
-                CELL_META$cell.xlim[2] + convert_x(4.7, "mm"), 8,
-                col = "#FFF7E9", border = NA)
-    circos.text(CELL_META$cell.xlim[2] + convert_x(2.8, "mm"), 4,
-                "Lin", cex = 0.5, facing = "clockwise")
-  }
-}, bg.border = NA)
-
-circos.heatmap(sigprofile.mtx.circ[,14:30], track.height = 0.15, col = col_fun1)
-circos.track(track.index = get.current.track.index(), panel.fun = function(x, y) {
-  if(CELL_META$sector.numeric.index == length(unique(split))) { # the last sector
-    circos.rect(CELL_META$cell.xlim[2] + convert_x(0.7, "mm"), 0,
-                CELL_META$cell.xlim[2] + convert_x(4.2, "mm"), 17,
-                col = "#5F9DF7", border = NA)
-    circos.text(CELL_META$cell.xlim[2] + convert_x(2.5, "mm"), 8,
-                "Steele", cex = 0.5, facing = "clockwise")
-  }
-}, bg.border = NA)
-
-circos.heatmap(sigprofile.mtx.circ[,31:nrow(sigprofile.mtx.circ)], track.height = 0.15, col = col_fun1, dend.side = "inside")
-circos.track(track.index = get.current.track.index(), panel.fun = function(x, y) {
-  if(CELL_META$sector.numeric.index == length(unique(split))) { # the last sector
-    circos.rect(CELL_META$cell.xlim[2] + convert_x(0.2, "mm"), 15,
-                CELL_META$cell.xlim[2] + convert_x(1.3, "mm"), 38,
-                col = "#FFD372", border = NA)
-    circos.text(CELL_META$cell.xlim[2] + convert_x(0.8, "mm"), 27,
-                "Toronto", cex = 0.5, facing = "clockwise")
-  }
-}, bg.border = NA)
-
-circos.clear()
-dev.off()
-```
-
+# signature profile for the cell number with top signature flavor
 ```{r}
 signum.dflist <- lapply(celltypes, function(ct) {
   result_dir = paste0("../output/v2/results/LIGER/signature-analysis/", ct, "/signature-loading-analysis/", condition, "/")
@@ -212,140 +98,8 @@ signum.mtx <- signum.df %>%
 rownames(signum.mtx) <- signum.df$sample
 ```
 
-```{r}
-signum.sample.list <- lapply(signum.df$sample, function(s) {
-  vec <- signum.df %>%
-    filter(sample == s) %>% 
-    select(-cohort, -sample) %>% 
-    select(where(~ !all(is.na(.x)))) %>% 
-    select(where(~ any(. != 0))) %>% 
-    as.vector() %>% 
-    unlist()
-  
-  rep(names(vec), vec)
-})
-names(signum.sample.list) <- signum.df$sample
-```
 
-```{r}
-unique(str_split(colnames(signum.mtx), pattern = " ", simplify = T)[,1])
-holder <- table(str_split(colnames(signum.mtx), pattern = " ", simplify = T)[,1]) %>% as.data.frame() %>%
-  mutate(min = 0, max = Freq) %>%
-  select(-Freq)
-holder1 <- holder$Var1
-holder <- holder %>%
-  select(-Var1) %>%
-  as.matrix()
-rownames(holder) <- holder1
-```
-
-```{r}
-png("test6.png", width = 7, height = 7, units = "in", res = 360)
-circos.initialize(unique(str_split(colnames(signum.mtx), pattern = " ", simplify = T)[,1]), xlim = holder)
-circos.track(ylim = c(0, max(signum.mtx[1,])), panel.fun = function(x, y) {
-    value = signum.mtx[1,]
-    circos.barplot(value, 1:ncol(signum.mtx) - 0.5, col = 1:ncol(signum.mtx))
-})
-circos.clear()
-dev.off()
-```
-
-```{r}
-signum.profile.plist <- lapply(unique(signum.df.long$sample), function(s) {
-  # ----- This section prepare a dataframe for plotting ---- #
-  signum.df.long.sample <- signum.df.long %>% filter(sample == s) %>%
-    mutate_if(is.numeric, ~replace(., is.na(.), 0))
-  signum.df.long.sample$celltype <- factor(signum.df.long.sample$celltype, levels = unique(signum.df.long.sample$celltype))
-  
-  # Set a number of 'empty bar' to add at the end of each group
-  empty_bar <- 1
-  to_add <- data.frame(matrix(NA, empty_bar*nlevels(signum.df.long.sample$celltype), ncol(signum.df.long.sample)))
-  colnames(to_add) <- colnames(signum.df.long.sample)
-  to_add$celltype <- rep(levels(signum.df.long.sample$celltype), each=empty_bar)
-  signum.df.long.sample <- rbind(signum.df.long.sample, to_add)
-  signum.df.long.sample <- signum.df.long.sample %>% arrange(celltype)
-  signum.df.long.sample$id <- seq(1, nrow(signum.df.long.sample))
-  
-  # Get the name and the y position of each label
-  number_of_bar <- nrow(signum.df.long.sample)
-  angle <- 90 - 360 * (signum.df.long.sample$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
-  signum.df.long.sample$hjust <- ifelse( angle < -90, 1, 0)
-  signum.df.long.sample$angle <- ifelse(angle < -90, angle+180, angle)
-  # ----- ------------------------------------------- ---- #
-  
-  # prepare a data frame for base lines
-  base_data <- signum.df.long.sample %>% 
-    group_by(celltype) %>% 
-    summarize(start=min(id), end=max(id) - empty_bar) %>% 
-    rowwise() %>% 
-    mutate(title=mean(c(start, end)))
-  
-  # prepare a data frame for grid (scales)
-  grid_data <- base_data
-  grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1.5
-  grid_data$start <- grid_data$end - 1
-  #grid_data <- grid_data[-1,]
-  
-  signum.df.long.sample$log2num <- log2(signum.df.long.sample$num + 1)
-  signum.df.long.sample$log2num[signum.df.long.sample$log2num == 0] = 0.1
-  
-  p <- ggplot(signum.df.long.sample, aes(x = as.factor(id), y= log2num, fill = celltype)) + 
-    geom_bar(aes(x = as.factor(id), y= log2num, fill = celltype), stat = "identity", alpha = 0.5) + 
-    # Add a val=100/75/50/25 lines. I do it at the beginning to make sure barplots are OVER it.
-    geom_segment(data=grid_data, aes(x = end, y = 7, xend = start, yend = 7), colour = "grey", alpha=1, size=0.3, inherit.aes = FALSE ) +
-    geom_segment(data=grid_data, aes(x = end, y = 5, xend = start, yend = 5), colour = "grey", alpha=1, size=0.3, inherit.aes = FALSE ) +
-    geom_segment(data=grid_data, aes(x = end, y = 3, xend = start, yend = 3), colour = "grey", alpha=1, size=0.3, inherit.aes = FALSE ) +
-    geom_segment(data=grid_data, aes(x = end, y = 1, xend = start, yend = 1), colour = "grey", alpha=1, size=0.3, inherit.aes = FALSE ) +
-    # Add text showing the value of each 100/75/50/25 lines
-    annotate("text", x = rep(max(signum.df.long.sample$id),4), y = c(1.5, 3.5, 5.5, 7.5), label = c("1", "3", "5", "7") , 
-             color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
-    geom_bar(aes(x = as.factor(id), y= log2num, fill = celltype), stat = "identity", alpha = 0.5) + 
-    # Limits of the plot = very important. The negative value controls the size of the inner circle, the positive one is useful to add size over each bar
-    ylim(-10, NA) + 
-    # Custom the theme: no axis title and no cartesian grid
-    theme_minimal() +
-    theme(
-      legend.position = "none",
-      axis.text = element_blank(),
-      axis.title = element_blank(),
-      panel.grid = element_blank(),
-      plot.margin = unit(rep(-1,4), "cm")      # Adjust the margin to make in sort labels are not truncated!
-    ) +
-    # This makes the coordinate polar instead of cartesian.
-    coord_polar(start = 0) +
-    # Add the labels, using the dataframe that we have created before
-    # geom_text(data=signum.df.long.sample, 
-    #           aes(x = id, y = log2num + 1, label = signature, hjust=hjust), 
-    #           color="black", fontface="bold", alpha=0.6, size=2.5, angle= signum.df.long.sample$angle, inherit.aes = FALSE ) + 
-    # Add base line information
-    geom_segment(data=base_data, aes(x = start, y = -1, xend = end, yend = -1), 
-                 colour = "black", alpha=0.8, size=0.6 , inherit.aes = FALSE ) +
-    geom_text(data=base_data, aes(x = title, y = -1.5, label = celltype), hjust = c(1,1,1,1,1,0,0,0,0), 
-              colour = "black", alpha=0.8, size=1.5, fontface="bold", inherit.aes = FALSE)
-  
-  p
-})
-names(signum.profile.plist) <- unique(signum.df.long$sample)
-```
-
-```{r}
-signum.profile.plist$P1
-```
-
-```{r}
-lapply(names(signum.profile.plist), function(p) {
-  png(paste0("test/", p, ".png"), width = 7, height = 7, unit = "in", res = 360)
-  print(signum.profile.plist[[p]])
-  dev.off()
-})
-```
-
-```{r}
-png("test/test.png", width = 25, height = 25, unit = "in", res = 360)
-cowplot::plot_grid(plotlist = signum.profile.plist, ncol = floor(sqrt(length(signum.profile.plist))))
-dev.off()
-```
-
+# working with some clinical data
 ```{r}
 clinical.data <- readRDS("../../4-cohort-NMF/intermediate_results/clinical_data_cleanup.rds")
 clinical.data <- lapply(names(clinical.data), function(n) {

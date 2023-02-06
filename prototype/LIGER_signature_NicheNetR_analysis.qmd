@@ -23,6 +23,7 @@ suppressPackageStartupMessages({
 ```
 
 # Read in SCEs
+## old code
 ```{r}
 sce.normal <- readRDS("../output/v2/data/SingleR-annotation/immune/sceRNASeq-SingleR-annotated-immune-sce-PengNormTissue.rds")
 sce.tumor <- readRDS("../output/v2/data/SingleR-annotation/immune/sceRNASeq-SingleR-annotated-immune-sce-Peng.rds")
@@ -42,6 +43,7 @@ sce.tumor$tissue <- "tumor"
 ```
 
 # Combine SCEs and coerce to a Seurat object
+## old code
 ```{r}
 common.redims <- intersect(reducedDimNames(sce.normal), reducedDimNames(sce.tumor))
 reducedDims(sce.normal) <- reducedDims(sce.normal)[common.redims]
@@ -59,11 +61,27 @@ seu <- as.Seurat(sce)
 rm(sce)
 ```
 
+## when one SCE has the top signature information
+```{r}
+sce$cell_type <- sce$top_sig
+sce$tissue <- str_split(sce$cell_type, " ", simplify = T)[,1]
+
+# sce.stellate <- sce
+# sce.mono <- sce
+
+colData(sce.mono) <- colData(sce.mono)[intersect(names(colData(sce.mono)), names(colData(sce.stellate)))]
+colData(sce.stellate) <- colData(sce.stellate)[intersect(names(colData(sce.mono)), names(colData(sce.stellate)))]
+
+seu <- as.Seurat(cbind(sce.mono, sce.stellate))
+```
+
+# check Seurat object 
 ```{r}
 seu@meta.data %>% head()
 ```
 
 # Tidy up cell type labels and set cell identity
+## old code
 ```{r}
 seu@meta.data$cell_type %>% table()
 
@@ -83,8 +101,16 @@ seu@meta.data$cell_type_coarse %>% table()
 seu <- SetIdent(seu, value = plyr::mapvalues(seu@meta.data$cell_type_coarse, from = c(NA), to = c("Unknown")))
 ```
 
+## new code
 ```{r}
-DimPlot(seu, reduction = "TSNE_on_Harmony")
+seu@meta.data$cell_type %>% table()
+
+seu <- SetIdent(seu, value = plyr::mapvalues(seu@meta.data$cell_type, from = c(NA), to = c("Unknown")))
+```
+
+# plot dimred
+```{r}
+DimPlot(seu, reduction = "TSNE_ON_HARMONY")
 ```
 
 ```{r}
@@ -92,10 +118,10 @@ seu@meta.data$tissue %>% table()
 ```
 
 ```{r}
-DimPlot(seu, reduction = "TSNE_on_Harmony", group.by = "tissue")
-png("test4.png", width = 9, height = 7, units = "in", res = 300)
-DimPlot(seu, reduction = "TSNE_on_Harmony", group.by = "tissue")
-dev.off()
+DimPlot(seu, reduction = "TSNE_ON_HARMONY", group.by = "tissue")
+# png("test4.png", width = 9, height = 7, units = "in", res = 300)
+# DimPlot(seu, reduction = "TSNE_on_Harmony", group.by = "tissue")
+# dev.off()
 ```
 
 # Read in NicheNet’s ligand-target prior model, ligand-receptor network and weighted integrated networks
@@ -123,7 +149,7 @@ head(weighted_networks$gr) # interactions and their weights in the gene regulato
 # 1. Define a “sender/niche” cell population and a “receiver/target” cell population present in your expression data and determine which genes are expressed in both populations
 ```{r}
 ## receiver
-receiver = "CD8 T"
+receiver = "Mono Rep 1"
 expressed_genes_receiver = get_expressed_genes(receiver, seu, pct = 0.10, assay_oi = "originalexp")
 
 background_expressed_genes = expressed_genes_receiver %>% .[. %in% rownames(ligand_target_matrix)]
@@ -131,7 +157,7 @@ background_expressed_genes = expressed_genes_receiver %>% .[. %in% rownames(liga
 
 ```{r}
 ## sender
-sender_celltypes = c("CD4 T","Treg", "Mono", "NK", "B", "cDC2")
+sender_celltypes = paste("stellate Rep", 1:6, sep = " ")
 
 list_expressed_genes_sender = sender_celltypes %>% unique() %>% lapply(get_expressed_genes, seu, 0.10, assay_oi = "originalexp") # lapply to get the expressed genes of every sender cell type separately here
 expressed_genes_sender = list_expressed_genes_sender %>% unlist() %>% unique()

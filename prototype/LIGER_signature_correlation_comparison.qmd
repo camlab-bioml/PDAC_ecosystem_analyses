@@ -1,0 +1,223 @@
+---
+title: "Relating inter-compartment correlation between discovery and validation"
+format: html
+editor: visual
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ComplexHeatmap)
+})
+```
+
+# Discovery cohort
+```{r}
+patient.profiles.df <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validated/loading-mean/patient-full-signature-profiles-loading-mean-validated.tsv")
+```
+
+## remove CD45 sorted samples, get meta data
+```{r}
+patient.profiles.df <- filter(patient.profiles.df, !grepl("CD45", sample))
+
+patient.profiles.meta <- select(patient.profiles.df, cohort, sample)
+```
+
+## gather into tidy format and get a cell type for each signature
+```{r}
+patient.profiles.df2 <- select(patient.profiles.df, -cohort) |> 
+  gather(signature, value, -sample) |> 
+  replace_na(list(value=0)) |> 
+  mutate(cell_type = gsub("| [0-9]", "", signature)) |> 
+  mutate(cell_type = gsub("[0-9]", "" , cell_type))
+```
+
+## scale the signatures so they have a max value 1 and min value 0
+```{r}
+patient.profiles.df2 <- group_by(patient.profiles.df2, cell_type, signature) |>
+  mutate(minn = min(value, na.rm=TRUE),
+         maxx = max(value, na.rm=TRUE)) |>
+  mutate(scaled_value = (value - minn) / (maxx - minn)) |>
+  #mutate(scaled_value = value) |> 
+  ungroup()
+```
+
+## un-tidy this back into matrix form
+```{r}
+patient.profiles.df3 <- select(patient.profiles.df2, sample, signature, scaled_value) |> 
+  spread(signature, scaled_value)
+
+patient.profiles.mat <- select(patient.profiles.df3, -sample) |> 
+  as.matrix()
+rownames(patient.profiles.mat) <- patient.profiles.df3$sample
+
+patient.profiles.mat <- patient.profiles.mat[patient.profiles.df$sample,]
+```
+
+## heatmap
+```{r}
+set.seed(42L)
+top_annot <- columnAnnotation(
+  cohort = patient.profiles.meta$cohort
+)
+right_annot <- rowAnnotation(
+  celltype = str_split(colnames(patient.profiles.mat), " ", simplify = T)[,1]
+)
+
+png(filename = "test15.png", width = 12, height = 10, units = "in", res = 321)
+Heatmap(t(patient.profiles.mat),
+        top_annotation = top_annot,
+        right_annotation = right_annot)
+dev.off()
+```
+
+# Validation cohort
+```{r}
+sig.dis.val.map <- read_tsv("dis-val-sig-mapping.tsv")
+```
+
+```{r}
+peng.hwang.sigs.df <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validation/loading-mean/patient-full-signature-profiles-loading-mean-validation.tsv")
+```
+
+```{r}
+validating.sigs <- filter(sig.dis.val.map, !grepl("|", validated.sig.name, fixed=TRUE)) |> 
+  filter(!is.na(validated.sig.name))
+
+peng.hwang.sigs.df <- select(peng.hwang.sigs.df, cohort, sample, all_of(validating.sigs$validation.sig.name))
+
+names(peng.hwang.sigs.df) <- plyr::mapvalues(names(peng.hwang.sigs.df), 
+                                    from = validating.sigs$validation.sig.name,
+                                    to = validating.sigs$validated.sig.name)
+```
+
+## normalize as per the discovery cohort
+```{r}
+peng.hwang.tidy.df <- select(peng.hwang.sigs.df, -cohort) |> 
+  gather(signature, value, -sample) |> 
+  replace_na(list(value=0)) |>  
+  mutate(cell_type = gsub("| [0-9]", "", signature)) |> 
+  mutate(cell_type = gsub("[0-9]", "" , cell_type)) |>
+  group_by(cell_type, signature) |>
+  mutate(minn = min(value, na.rm=TRUE),
+         maxx = max(value, na.rm=TRUE)) |>
+  mutate(scaled_value = (value - minn) / (maxx - minn)) |>
+  #mutate(scaled_value = value) |> 
+  ungroup()
+```
+
+## un-tidy this back into matrix form
+```{r}
+peng.hwang.tidy.again.df <- select(peng.hwang.tidy.df, sample, signature, scaled_value) |> 
+  spread(signature, scaled_value)
+
+peng.hwang.mat <- select(peng.hwang.tidy.again.df, -sample) |> 
+  as.matrix()
+rownames(peng.hwang.mat) <- peng.hwang.tidy.again.df$sample
+
+peng.hwang.mat <- peng.hwang.mat[peng.hwang.sigs.df$sample,]
+```
+
+## see how these match
+```{r}
+common.sigs <- intersect(colnames(patient.profiles.mat), colnames(peng.hwang.mat))
+
+png(filename = "test15.png", width = 15, height = 10, units = "in", res = 321)
+Heatmap(t(patient.profiles.mat)[common.sigs,], name = "validated/discovery") + 
+  Heatmap(t(peng.hwang.mat)[common.sigs,], name = "validation")
+dev.off()
+```
+
+# Are signature correlations consistent between cohorts?
+```{r}
+cc.disc <- cor(patient.profiles.mat, method="spearman")
+cc.val <- cor(peng.hwang.mat, method="spearman")
+cc <- cc.disc
+
+dfc.disc <- as.data.frame(cc.disc) |> 
+  rownames_to_column('signature_1') |> 
+  gather(signature_2, correlation_discovery, -signature_1)
+
+dfc.val <- as.data.frame(cc.val) |> 
+  rownames_to_column('signature_1') |> 
+  gather(signature_2, correlation_validation, -signature_1)
+```
+
+## join these together
+```{r}
+dfc <- inner_join(dfc.disc, dfc.val) |> 
+  as_tibble() |> 
+  filter(signature_1 != signature_2)
+
+dfc
+```
+
+## are within-cell type correlations more correlated than between?
+```{r}
+dfc <- dfc |> 
+  mutate(cell_type_1 = gsub("| [0-9]", "", signature_1)) |> 
+  mutate(cell_type_2= gsub("| [0-9]", "", signature_2)) |> 
+  mutate(same_cell_type = cell_type_1 == cell_type_2)
+```
+
+## let's not double-count correlations
+```{r}
+dfc$cell_type_str <- apply(dfc, 1, function(x) {
+  x <- x[c('signature_1', 'signature_2')]
+  x <- sort(x)
+  paste(x, collapse="_")
+})
+
+dfc <- dfc[!duplicated(dfc$cell_type_str),] 
+```
+
+```{r}
+with(dfc, cor.test(correlation_discovery, correlation_validation))
+
+with(filter(dfc, same_cell_type), cor.test(correlation_discovery, correlation_validation))
+
+with(filter(dfc, !same_cell_type), cor.test(correlation_discovery, correlation_validation))
+```
+
+```{r}
+filter(dfc, same_cell_type) |> 
+  ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
+  geom_point(aes(colour = cell_type_1)) +
+  facet_wrap(~ cell_type_1, scales = "free") + 
+  geom_smooth(method='lm')
+
+ggsave("test16.png", device = "png")
+
+filter(dfc, !same_cell_type) |> 
+  ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
+  geom_point(aes(colour = cell_type_2)) +
+  facet_wrap(~ cell_type_1, scales = "free") + 
+  geom_smooth(method='lm')
+
+ggsave("test17.png", device = "png")
+```
+
+# Which signatures validate the best?
+```{r}
+filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4)
+filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4) |> 
+  ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
+  geom_point(aes(colour = cell_type_1)) +
+  facet_wrap(~ cell_type_2, scales = "free") + 
+  geom_smooth(method='lm') + 
+  labs(title = "signatures that validate the best (cor > 0.4)")
+
+ggsave("test18.png", device = "png")
+```
+
+```{r}
+filter(dfc, correlation_discovery < -0.25, correlation_validation < -0.25)
+```
+
+```{r}
+filter(dfc, !same_cell_type)$cell_type_1 %>% table() 
+```
+
+
+
+

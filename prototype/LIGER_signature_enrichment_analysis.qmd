@@ -26,7 +26,7 @@ suppressPackageStartupMessages({
 ```
 
 ```{r}
-celltype = "activated_stellate"
+celltype = "stellate"
 ```
 
 ```{r}

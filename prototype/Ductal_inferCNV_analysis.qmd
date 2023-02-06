@@ -11,6 +11,7 @@ suppressPackageStartupMessages({
   library(sjstats)
   library(ggpubr)
   library(tidyr)
+  library(stringr)
   library(ComplexHeatmap)
   library(infercnv)
   library(Matrix)
@@ -25,7 +26,7 @@ suppressPackageStartupMessages({
 ```
 
 ```{r}
-sce.tumor <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-Toronto.rds")
+sce.tumor <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-Peng.rds")
 sce.normal.peng <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-PengNormTissue.rds")
 #sce.normal.steele <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-SteeleNormTissue.rds")
 ```
@@ -40,8 +41,8 @@ rm(sce.normal.peng)
 ```
 
 ```{r}
-sce.tumor.subsampled <- sce.tumor#[,sample(colnames(sce.tumor), 10000)]
-sce.normal <- sce.normal#[,sample(colnames(sce.normal), 10000)]
+sce.tumor.subsampled <- sce.tumor[,sce.tumor$sample == "CRR034499"]
+sce.normal <- sce.normal[,sample(colnames(sce.normal), 5000)]
 table(sce.tumor.subsampled$predicted.annotation.l1)
 ```
 
@@ -103,7 +104,7 @@ write.table(colData(sce.combined)[,'cell_type', drop=F], 'test_classes.txt', sep
 ```
 
 ```{r}
-order_csv <-  read.csv("../resources/gencode_v19_gen_pos.complete.txt", sep = '\t', header=FALSE)
+order_csv <-  read.csv("../resources/cell-type-assignment/infercnv/gencode_v19_gen_pos.complete.txt", sep = '\t', header=FALSE)
 order_csv$V1 <- sapply(lapply(lapply(order_csv$V1, strsplit, "|", fixed=TRUE), '[[',1),'[',1)
 order_csv <- order_csv[!duplicated(order_csv$V1),,drop=FALSE]
 
@@ -113,29 +114,38 @@ write.table(order_csv, "test_gene_order.txt", sep="\t", col.names=FALSE, row.nam
 
 ```{r}
 infer <- CreateInfercnvObject(
-        raw_counts_matrix= counts.mtx,
+        raw_counts_matrix= as.matrix(counts.mtx),
         delim="\t",
         annotations_file= "test_classes.txt",
         gene_order_file= "test_gene_order.txt",
         ref_group_names= c("Normal"))
 ```
 
+# run infercnv
 ```{r}
+options(scipen = 100)
 infercnv_obj <- infercnv::run(
         infer,
-        cutoff = 0.1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+        cutoff = 0.01, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
+        min_cells_per_gene = 3,
+        window_length = 101,
         out_dir = "infercnv-hmm/",
         cluster_by_groups = T, 
         plot_steps = T,
         denoise = T,
+        sd_amplifier = 1.5,
         HMM = T,
+        HMM_report_by = "subcluster",
         HMM_type = "i6",
         analysis_mode = "subclusters",
-        tumor_subcluster_partition_method: "leiden",
+        tumor_subcluster_partition_method = "leiden",
+        tumor_subcluster_pval = 0.1,
         no_prelim_plot = T,
         num_threads = 16, 
-        png_res = 360,
-        resume_mode = T
+        png_res = 321,
+        resume_mode = T,
+        save_rds = F,
+        save_final_rds = T
     )
 ```
 
@@ -158,6 +168,9 @@ vars <-colVars(infer_cnv_frame)
 vars_df <- data.frame(colnames(infer_cnv_frame), vars)
 rownames(vars_df) <- vars_df$colnames.infer_cnv_frame.
 vars_df$colnames.infer_cnv_frame. <- NULL
+
+sce.tumor.infercnv <- SingleCellExperiment(assays = SimpleList(logcounts = infer_cnv_frame))
+#sce.tumor.infercnv <- logNormCounts(sce.tumor.infercnv)
 ```
 
 ```{r}
@@ -169,11 +182,16 @@ colData(sce.tumor.results)$infer_cnv_var <-vars_df$vars
 ```{r}
 sce.tumor.results <- scater::runPCA(sce.tumor.results)
 sce.tumor.results <- scater::runUMAP(sce.tumor.results)
+
+sce.tumor.infercnv <- scater::runPCA(sce.tumor.infercnv, subset_row = getTopHVGs(modelGeneVar(sce.tumor.infercnv), prop = 0.1))
+sce.tumor.infercnv <- scater::runUMAP(sce.tumor.infercnv)
 ```
 
 ```{r}
 p <- plotReducedDim(sce.tumor.results, "UMAP", colour_by="infer_cnv_var")
-p <- p + scale_colour_continuous(name = "infer_cnv_var", type = "viridis", limits=c(0.000,0.01), oob=squish)
+p <- p + scale_colour_continuous(name = "infer_cnv_var", type = "viridis", 
+                                 limits=c(0, 0.002), 
+                                 oob=squish)
 gridExtra::grid.arrange(
     p,
     plotReducedDim(sce.tumor.results, "UMAP", colour_by="cell_type"),
@@ -194,17 +212,241 @@ gridExtra::grid.arrange(
 ```{r}
 cluster_scores <- aggregate(colData(sce.tumor.results)$infer_cnv_var, list(colData(sce.tumor.results)$label),FUN=mean)
 cluster_scores[order(cluster_scores$x),][1:10,"x", drop=FALSE]
+
+ggplot(data = as.data.frame(colData(sce.tumor.results)) |> select(label, infer_cnv_var), aes(x = label, y = infer_cnv_var)) + 
+  geom_boxplot() +
+  stat_compare_means(method = "t.test")
 ```
 
 ```{r}
-
+#The infercnv_object has the following attributes, we are insterested in the processed expression data in "expr.data"
+names(attributes(infercnv_obj))
 ```
 
 ```{r}
+holder2 <- read.table("infercnv-hmm/infercnv.observation_groupings.txt",
+                      header = T)
 
+cnv.regions <- read.table("infercnv-hmm/HMM_CNV_predictions.HMMi6.leiden.hmm_mode-subclusters.Pnorm_0.5.pred_cnv_regions.dat",
+                     header = T)
+cnv.genes <- read.table("infercnv-hmm/HMM_CNV_predictions.HMMi6.leiden.hmm_mode-subclusters.Pnorm_0.5.pred_cnv_genes.dat",
+                     header = T)
+cell.groupings <- read.table("infercnv-hmm/17_HMM_predHMMi6.leiden.hmm_mode-subclusters.cell_groupings",
+                             header = T)
+```
+
+```{r}
+sce.tumor.results$cell_groupings <- plyr::mapvalues(colnames(sce.tumor.results),
+                                                    from = cell.groupings$cell,
+                                                    to = cell.groupings$cell_group_name)
+```
+
+```{r}
+table(sce.tumor.results$cell_groupings)
+```
+
+```{r}
+png("test19.png", width = 20, height = 7, units = "in", res = 321)
+gridExtra::grid.arrange(
+    plotReducedDim(sce.tumor.results,"UMAP", colour_by="label"),
+    plotReducedDim(sce.tumor.results, "UMAP", colour_by="cell_groupings"),
+    ncol=2
+)
+dev.off()
 ```
 
 
+```{r}
+colData(sce.tumor.infercnv) <- colData(sce.tumor.results)
+
+nn.clusters <- clusterCells(sce.tumor.infercnv, use.dimred="PCA", BLUSPARAM=NNGraphParam(k=40))
+colLabels(sce.tumor.infercnv) <- nn.clusters
+
+comparisons <- list( c("1", "2"), c("2", "3"), c("1", "3") )
+ggplot(data = as.data.frame(colData(sce.tumor.infercnv)) |> select(label, infer_cnv_var), aes(x = label, y = infer_cnv_var)) + 
+  geom_boxplot() +
+  stat_compare_means(comparisons = comparisons, method = "t.test") + 
+  stat_compare_means(label.y = 0.008, method = "anova")
+```
+
+```{r}
+cnv.regions.median <- cnv.regions %>%
+  group_by(cell_group_name) %>%
+  summarise(state_median = median(state)) %>%
+  ungroup()
+
+sce.tumor.infercnv$cnv_state <- plyr::mapvalues(sce.tumor.infercnv$cell_groupings,
+                                                from = cnv.regions.median$cell_group_name,
+                                                to = cnv.regions.median$state_median)
+
+saveRDS(sce.tumor.infercnv, file = "infercnv-smoothed-expression-ductal-CRR034499.rds")
+```
+
+```{r}
+png("test20.png", width = 20, height = 7, units = "in", res = 321)
+gridExtra::grid.arrange(
+    plotReducedDim(sce.tumor.infercnv,"UMAP", colour_by="label"),
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="cell_groupings"),
+    ncol=2
+)
+dev.off()
+```
+
+```{r}
+png("test21.png", width = 20, height = 7, units = "in", res = 321)
+gridExtra::grid.arrange(
+    plotReducedDim(sce.tumor.infercnv,"UMAP", colour_by="label"),
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="cnv_state"),
+    ncol=2
+)
+dev.off()
+```
+
+```{r}
+recluster.state.median <- data.frame(label = as.character(sce.tumor.infercnv$label),
+                                     state = as.numeric(sce.tumor.infercnv$cnv_state))
+
+recluster.state.median <- recluster.state.median %>%
+  group_by(label) %>%
+  summarise(state_median = median(state)) %>%
+  ungroup()
+```
+
+```{r}
+hmm.output <- logcounts(sce.tumor.infercnv) %>% t() %>% as.data.frame()
+
+hmm.output$label <- sce.tumor.infercnv$label
+
+hmm.output <- hmm.output %>%
+  group_by(label) %>%
+  summarise(across(everything(), mean)) %>%
+  ungroup()
+
+holder <- hmm.output$label
+hmm.output$label <- NULL
+rownames(hmm.output) <- holder
+hmm.output <- as.matrix(hmm.output)
+rm(holder)
+
+hmm.output <- hmm.output[,!(colSums(hmm.output) == 0)]
+```
+
+```{r}
+png("test22.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output)
+dev.off()
+```
+
+```{r}
+intersect(cnv.genes$gene, colnames(hmm.output)) %>% length()
+
+cnv.genes.common<- cnv.genes[cnv.genes$gene %in% colnames(hmm.output),] %>%
+  select(gene, chr, start, end) %>%
+  distinct()
+
+cnv.genes.common$chr <- str_split(cnv.genes.common$chr, "chr", simplify = T)[,2]
+cnv.genes.common$chr <- factor(cnv.genes.common$chr, levels = seq(length(unique(cnv.genes.common$chr))))
+cnv.genes.common <- cnv.genes.common %>%
+  arrange(chr, start, end)
+
+hmm.output <- hmm.output[,cnv.genes.common$gene]
+```
+
+```{r}
+annot <- cnv.genes.common %>% select(chr)
+#annot$chr <- factor(annot$chr, levels = seq(length(unique(annot$chr))))
+rownames(annot) <- cnv.genes.common$gene
+head(colnames(hmm.output))
+head(rownames(annot))
+
+png("test24.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output, 
+         cluster_rows = T, 
+         cluster_cols = F,
+         annotation_col = annot,
+         main = "mean smoothed expression")
+dev.off()
+```
+
+```{r}
+summary(colVars(hmm.output))
+
+hmm.output <- hmm.output[,(colVars(hmm.output) > 0.0000881906)]
+```
+
+```{r}
+png("test23.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output)
+dev.off()
+```
+
+```{r}
+intersect(cnv.genes$gene, colnames(hmm.output)) %>% length()
+
+cnv.genes.common<- cnv.genes[cnv.genes$gene %in% colnames(hmm.output),] %>%
+  select(gene, chr, start, end) %>%
+  distinct()
+
+cnv.genes.common$chr <- str_split(cnv.genes.common$chr, "chr", simplify = T)[,2]
+cnv.genes.common$chr <- factor(cnv.genes.common$chr, levels = seq(length(unique(cnv.genes.common$chr))))
+cnv.genes.common <- cnv.genes.common %>%
+  arrange(chr, start, end)
+
+hmm.output <- hmm.output[,cnv.genes.common$gene]
+```
+
+```{r}
+annot <- cnv.genes.common %>% select(chr)
+#annot$chr <- factor(annot$chr, levels = seq(length(unique(annot$chr))))
+rownames(annot) <- cnv.genes.common$gene
+head(colnames(hmm.output))
+head(rownames(annot))
+
+png("test25.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output, 
+         cluster_rows = T, 
+         cluster_cols = F,
+         annotation_col = annot,
+         main = "mean smoothed expression")
+dev.off()
+```
+
+```{r}
+summary(colVars(hmm.output))
+
+hmm.output <- hmm.output[,(colVars(hmm.output) > 0.0005501)]
+```
+
+```{r}
+intersect(cnv.genes$gene, colnames(hmm.output)) %>% length()
+
+cnv.genes.common<- cnv.genes[cnv.genes$gene %in% colnames(hmm.output),] %>%
+  select(gene, chr, start, end) %>%
+  distinct()
+
+cnv.genes.common$chr <- str_split(cnv.genes.common$chr, "chr", simplify = T)[,2]
+cnv.genes.common$chr <- factor(cnv.genes.common$chr, levels = seq(length(unique(cnv.genes.common$chr))))
+cnv.genes.common <- cnv.genes.common %>%
+  arrange(chr, start, end)
+
+hmm.output <- hmm.output[,cnv.genes.common$gene]
+```
+
+```{r}
+annot <- cnv.genes.common %>% select(chr)
+#annot$chr <- factor(annot$chr, levels = seq(length(unique(annot$chr))))
+rownames(annot) <- cnv.genes.common$gene
+head(colnames(hmm.output))
+head(rownames(annot))
+
+png("test26.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output, 
+         cluster_rows = T, 
+         cluster_cols = F,
+         annotation_col = annot,
+         main = "mean smoothed expression")
+dev.off()
+```
 
 
 

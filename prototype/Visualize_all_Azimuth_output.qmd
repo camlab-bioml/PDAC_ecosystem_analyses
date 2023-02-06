@@ -1,0 +1,127 @@
+---
+title: "Visualize all Azimuth output"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(scater)
+  library(stringr)
+  # library(Seurat)
+  # library(patchwork)
+  # library(ComplexHeatmap)
+  # library(fastcluster)
+})
+```
+
+```{r}
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto")
+```
+
+```{r}
+sces <- lapply(cohorts, function(cohort) readRDS(paste0("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-", cohort, ".rds")))
+names(sces) <- cohorts
+```
+
+```{r}
+lapply(sces, function(sce) head(rownames(sce)))
+```
+
+# subset to common genes across cohorts
+```{r}
+genes <- lapply(sces, rownames)
+genes.common <- Reduce(intersect, genes)
+```
+
+```{r}
+sces <- lapply(sces, function(sce) sce[genes.common,])
+```
+
+```{r}
+sces <- lapply(sces, function(sce) {
+  rownames(sce) <- paste(rowData(sce)$ensembl_id, rownames(sce), sep = "_")
+  sce
+})
+```
+
+```{r}
+genes <- lapply(sces, rownames)
+genes.common <- Reduce(intersect, genes)
+```
+
+```{r}
+sces <- lapply(sces, function(sce) sce[genes.common,])
+```
+
+# tidyup metadata
+```{r}
+sces <- lapply(sces, function(sce) {
+  rowData(sce)$chr <- NULL
+  rowData(sce)$gene_start <- NULL
+  rowData(sce)$gene_end <- NULL
+  rowData(sce)$gene_strand <- NULL
+  sce
+})
+```
+
+# cbind sces
+```{r}
+sce <- Reduce(cbind, sces)
+rm(sces)
+```
+
+# plot UMAPs
+```{r}
+dim.red <- "REF.UMAP"
+dim.red <- "UMAP_ON_HARMONY"
+dim.red <- "TSNE_ON_HARMONY"
+
+field.colour <- "cell_type"
+```
+
+```{r}
+sce$cell_type <- sce$predicted.annotation.l1
+
+sce$cell_type <- plyr::mapvalues(sce$cell_type,
+                                 from = c("alpha", "beta", "delta", "epsilon", "gamma"),
+                                 to = c(rep("endocrine", 5)))
+
+sce$cell_type <- sce$cell_type %>% str_to_title()
+```
+
+```{r}
+p <- plotReducedDim(object = sce,
+                    dimred = dim.red,
+                    colour_by = field.colour,
+                    point_alpha = 0.4,
+                    point_size = 0.4,
+                    theme_size = 14) + 
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 0.8)))
+```
+
+```{r}
+ggsave(filename = "test4.png",
+       plot = p, 
+       device = "png", 
+       units = "in",
+       width = 10,
+       height = 7,
+       dpi = "retina",
+       bg = "white")
+```
+
+
+
+
+
+
+
+
+
+
+
+

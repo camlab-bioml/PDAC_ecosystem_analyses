@@ -1,0 +1,132 @@
+---
+title: "Cell type assignment summary"
+format: html
+editor: visual
+---
+
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(BiocParallel)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+})
+```
+
+```{r}
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto")
+```
+
+# load sces
+```{r}
+sce.list <- lapply(cohorts, function(c) {
+  readRDS(paste0("../output/v2/data/SingleR-annotation/immune/sceRNASeq-SingleR-annotated-immune-sce-", c, ".rds"))
+})
+names(sce.list) <- cohorts
+```
+
+```{r}
+lapply(sce.list, function(sce) head(rownames(sce)))
+```
+
+# get cell meta data
+```{r}
+coldata.list <- lapply(sce.list, colData)
+coldata <- Reduce(rbind, coldata.list) %>% as.data.frame()
+```
+
+```{r}
+coldata.plot <- coldata %>%
+  select(sample, singler.pruned.label) %>%
+  group_by(sample) %>%
+  count(singler.pruned.label) %>%
+  ungroup()
+```
+
+# plot cell type counts per sample (stacked bars)
+```{r}
+p <- ggplot(coldata.plot, aes(fill = singler.pruned.label, y = n, x = sample)) + 
+  geom_bar(position="fill", stat="identity") + 
+  theme_pubr() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+p
+ggsave("test12.png", plot = p, device = "png", width = 15, height = 7, units = "in", dpi = 321)
+```
+
+# subset to common genes across cohorts
+```{r}
+sce.list <- lapply(sce.list, function(sce) {
+  rownames(sce) <- paste(rowData(sce)$ensembl_id, rownames(sce), sep = "_")
+  sce
+})
+
+genes <- lapply(sce.list, rownames)
+genes.common <- Reduce(intersect, genes)
+sce.list <- lapply(sce.list, function(sce) sce[genes.common,])
+```
+
+# cbind sces
+```{r}
+sce <- Reduce(cbind, sce.list)
+rm(sce.list)
+
+sce$celltype <- sce$singler.pruned.label
+```
+
+```{r}
+sce.redimred <- do_dimred(sce, harmonize = T, batch_col = "sample")
+```
+
+# plot UMAPs
+```{r}
+dim.red.plot = "TSNE_on_Harmony"
+
+p.celltype <- plotReducedDim(object = sce.redimred,
+                             dimred = dim.red.plot,
+                             colour_by = 'celltype',
+                             point_alpha = 0.4,
+                             point_size = 0.4,
+                             theme_size = 14) + 
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 0.8)))
+
+p.cohort <- plotReducedDim(object = sce.redimred,
+                           dimred = dim.red.plot,
+                           colour_by = 'cohort',
+                           point_alpha = 0.4,
+                           point_size = 0.4,
+                           theme_size = 14) + 
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 0.8)))
+```
+
+```{r}
+p.celltype
+p.cohort
+```
+
+# save plots
+```{r}
+ggsave(filename = "test13.png", plot = p.celltype, 
+       device = "png", units = "in", width = 10, height = 7, dpi = "retina", bg = "white")
+ggsave(filename = "test14.png", plot = p.cohort, 
+       device = "png", units = "in", width = 10, height = 7, dpi = "retina", bg = "white")
+```
+
+
+
+
+
+
+
+
+
+

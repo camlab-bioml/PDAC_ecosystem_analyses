@@ -25,7 +25,6 @@ suppressPackageStartupMessages({
 ```
 
 # load data
-
 ```{r}
 # celltype <- "Mono"
 celltypes <- c("Mono", "activated_stellate")
@@ -33,37 +32,14 @@ condition <- "validated"
 ```
 
 ```{r}
-# df.sig <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", 
-#                          celltype, 
-#                          "/loading-matrices/", 
-#                          celltype, 
-#                          "-signature-loading-", 
-#                          condition, 
-#                          ".tsv"))
-
 df.sig.list <- lapply(celltypes, function(ct) {
-  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", 
-                  ct, 
-                  "/loading-matrices/", 
-                  ct, 
-                  "-signature-loading-", 
-                  condition, 
-                  ".tsv"))
+  read_tsv(paste0(ct, "-signature-loading-", condition, ".tsv"))
 })
 names(df.sig.list) <- celltypes
 ```
 
 # removing samples with too few cells
 ```{r}
-# table(df.sig$sample)
-
-# df.sig <- df.sig %>%
-#   group_by(sample) %>%
-#   mutate(count = n()) %>%
-#   ungroup() %>% 
-#   filter(count >= 10) %>%
-#   select(!count)
-
 df.sig.list <- lapply(df.sig.list, function(df.sig) {
   df.sig %>%
     group_by(sample) %>%
@@ -73,7 +49,6 @@ df.sig.list <- lapply(df.sig.list, function(df.sig) {
     select(!count)
 })
 
-# table(df.sig$sample)
 table(df.sig.list$Mono$sample)
 table(df.sig.list$activated_stellate$sample)
 
@@ -96,27 +71,10 @@ stan.data.list <- lapply(names(df.sig.list), function(ct) {
   )
 })
 names(stan.data.list) <- names(df.sig.list)
-
-# N = nrow(df.sig)
-# P = length(unique(df.sig$sample))
-# K = length(grep(celltype, names(df.sig), value = T))
-# Y = df.sig %>% select(contains(celltype)) %>% as.matrix()
-# y = Y / sd(Y)
-# x = plyr::mapvalues(df.sig$sample, 
-#                     from = unique(df.sig$sample),
-#                     to = seq(length(unique(df.sig$sample)))) %>% as.numeric()
 ```
 
 # build the stan data list for model fitting
 ```{r}
-# stan.data <- list(
-#   N = N,
-#   P = P,
-#   K = K,
-#   Y = Y,
-#   x = x
-# )
-
 stan.data <- list(
   C = length(stan.data.list),
   P_list = seq(1:stan.data.list$Mono$P),
@@ -133,15 +91,16 @@ stan.data <- list(
 )
 ```
 
-# removing one signature
+# Optional debugging code 
+## removing one signature
 ```{r}
 stan.data$K_mono <- stan.data$K_mono - 1
 stan.data$y_mono <- stan.data$y_mono[,-4]
 
-stan.data$y_mono <- matrix(runif(nrow(stan.data$y_mono) * ncol(stan.data$y_mono)), nrow = nrow(stan.data$y_mono))
+# stan.data$y_mono <- matrix(runif(nrow(stan.data$y_mono) * ncol(stan.data$y_mono)), nrow = nrow(stan.data$y_mono))
 ```
 
-# generating white noise
+## generating white noise
 ```{r}
 #calculate the sd for each row...
 sds <- colSds(stan.data$y_mono)
@@ -155,12 +114,12 @@ m <- matrix(data = m, nrow = ncol(stan.data$y_mono), ncol = nrow(stan.data$y_mon
 head(m)
 ```
 
-# add white noise to signature loading matrix
+## adding white noise to signature loading matrix
 ```{r}
 stan.data$y_mono <- stan.data$y_mono + abs(m)
 ```
 
-# check each signature
+## checking each signature
 ```{r}
 summary(stan.data$y_mono[,1])
 summary(stan.data$y_mono[,2])
@@ -174,7 +133,7 @@ summary(stan.data$y_mono[,6])
 (rowSums(stan.data$y_mono) == 0) %>% table()
 ```
 
-# check correlation between mean signature loadings per patient
+## checking correlation between mean signature loadings per patient
 ```{r}
 holder.df <- cbind(stan.data$y_act_ste, stan.data$x_act_ste) %>% as.data.frame()
 names(holder.df) <- c(names(holder.df)[1:length(names(holder.df))-1], "sample")
@@ -188,18 +147,8 @@ cor(holder.df[,-1], holder_mono.df[,-1])
 holder_mono.df <- holder.df
 ```
 
+# save Stan data list
 ```{r}
 saveRDS(stan.data, file = "Stan/stanData.rds")
 ```
-
-
-
-
-
-
-
-
-
-
-
 

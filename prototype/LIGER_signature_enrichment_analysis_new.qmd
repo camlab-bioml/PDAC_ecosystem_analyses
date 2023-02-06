@@ -1,0 +1,233 @@
+---
+title: "LIGER signature enrichment analysis new"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(stringr)
+  library(ComplexHeatmap)
+  library(clusterProfiler)
+  library(GeneOverlap)
+  library(enrichplot)
+  library(patchwork)
+})
+```
+
+```{r}
+celltype = "Mono"
+sig.interested = "1"
+```
+
+```{r}
+validated <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-signature-loading-validated.tsv"))
+collapsed <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-signature-loading-collapsed.tsv"))
+sces <- readRDS(paste0("../output/v2/data/cohort-discovery-validation-grouping/", celltype, "/scRNAseq-", celltype, "-scelist-discovery.rds"))
+```
+
+```{r}
+sce <- Reduce(cbind, sces)
+rm(sces)
+```
+
+```{r}
+validated <- collapsed
+celltype <- paste(celltype, "Rep", sep = " ")
+```
+
+```{r}
+intersect(validated$cell_id, colnames(sce)) |> length()
+```
+
+```{r}
+match(validated$cell_id, colnames(sce)) %>% tail(100)
+```
+
+# determine max signature
+```{r}
+validated.core <- validated |> 
+  select(contains(celltype)) |>
+  rowwise() %>%
+  mutate(top_sig = paste0(names(.)[c_across() == max(c_across())], collapse = '_'))
+
+table(validated.core$top_sig)
+```
+
+```{r}
+validated.holder <- data.frame(cell_id = validated$cell_id,
+                               top_sig = validated.core$top_sig)
+
+match(validated.holder$cell_id, colnames(sce))
+
+sce$top_sig <- validated.holder$top_sig
+```
+
+```{r}
+ggplot(data = as.data.frame(colData(sce)) %>% select(predicted.annotation.l1, top_sig),
+       mapping = aes(x = top_sig, fill = predicted.annotation.l1)) + 
+  geom_bar()
+```
+
+# perform enrichment analysis
+```{r}
+head(rownames(sce))
+
+geneuniverse <- str_split(rownames(sce), "_", simplify = T)[,2]
+```
+
+```{r}
+sce.selected <- sce[,sce$top_sig == paste(celltype, sig.interested, sep = " ")]
+
+geneList <- logcounts(sce.selected) %>% rowMeans()
+names(geneList) <- geneuniverse
+geneList <- geneList %>% sort(decreasing = T)
+head(geneList)
+```
+
+```{r}
+ans.go <- gseGO(geneList,
+                OrgDb = "org.Hs.eg.db",
+                keyType = "ENSEMBL",
+                ont = "BP", 
+                minGSSize = 10,
+                maxGSSize = 500,
+                pvalueCutoff = 0.01,
+                pAdjustMethod = "BH",
+                verbose = T,
+                seed = F,
+                by = "fgsea")
+```
+
+```{r}
+tab.gse <- as.data.frame(ans.go)
+tab.gse <- tab.gse %>%
+  filter(p.adjust < 1e-4) %>%
+  arrange(desc(NES))
+
+tab.gse$Description <- factor(tab.gse$Description, levels = tab.gse$Description[order(tab.gse$NES)])
+
+p <- ggplot(tab.gse[1:20,], aes(x = NES, y = Description, fill = -log(p.adjust))) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_c() + 
+  labs(title = paste0("Signature ", sig.interested)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 40))
+p
+ggsave("test.png", p, width = 9, height = 8, units = "in")
+```
+
+# hypergeometric test
+## load signature gene loadings and known marker lists
+```{r}
+celltype = "CD4"
+num_top_genes = 50
+
+sig.gene.loading <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-gene-loading-collapsed.tsv"))
+
+known.marker.lists <- read_csv(paste0("../resources/markers/known-signature-markers/", celltype, "/Schalck_cell_state_marker_list.csv"))
+```
+
+## for collapsed version of signatures
+```{r}
+celltype <- paste(celltype, "Rep", sep = " ")
+```
+
+## make named lists
+```{r}
+sig.top.genes <- lapply(seq(length(sig.gene.loading) - 1), function(sig) {
+  signame <- paste(celltype, sig, sep = " ")
+  genelist <- sig.gene.loading %>% 
+    select(all_of(signame), gene) %>% 
+    slice_max(order_by = get(signame), n = num_top_genes) %>% 
+    pull(gene)
+  str_split(genelist, "_", simplify = T)[,1]
+})
+names(sig.top.genes) <- names(sig.gene.loading)[seq(length(sig.gene.loading)-1)]
+```
+
+```{r}
+marker.lists <- lapply(known.marker.lists, function(markerlist) {
+  markerlist[!is.na(markerlist)]
+})
+```
+
+```{r}
+geneuniverse <- str_split(rownames(sce), "_", simplify = T)[,1]
+```
+
+## construct a GeneOverlap object
+```{r}
+go.obj <- newGeneOverlap(sig.top.genes$`stellate Rep 1`,
+                         marker.lists$myCAF,
+                         genome.size = length(geneuniverse))
+go.obj
+```
+
+```{r}
+print(go.obj)
+```
+
+## test overlap
+```{r}
+go.obj <- testGeneOverlap(go.obj)
+go.obj
+```
+
+```{r}
+print(go.obj)
+```
+
+```{r}
+getIntersection(go.obj)
+getJaccard(go.obj)
+getContbl(go.obj)
+getOddsRatio(go.obj)
+getPval(go.obj)
+```
+
+## compare all pairs
+### construct GOM
+```{r}
+gom.obj <- newGOM(sig.top.genes, marker.lists, spec = "hg19.gene")
+print(gom.obj)
+```
+
+### draw heatmaps
+```{r}
+drawHeatmap(gom.obj, 
+            what = "odds.ratio", 
+            log.scale = F, 
+            adj.p = T, 
+            cutoff = .05, 
+            ncolused = 5, 
+            grid.col = "Blues", 
+            note.col = "black")
+```
+
+```{r}
+oddsratio.mtx <- getMatrix(gom.obj, name = "odds.ratio") %>% as.numeric()
+Heatmap(oddsratio.mtx, cluster_rows = F, cluster_columns = F)
+```
+
+```{r}
+drawHeatmap(gom.obj, 
+            what = "Jaccard", 
+            log.scale = T, 
+            adj.p = T, 
+            cutoff = .05, 
+            ncolused = 5, 
+            grid.col = "Oranges", 
+            note.col = "black")
+```
+
+

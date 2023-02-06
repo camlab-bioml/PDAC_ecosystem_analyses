@@ -1,0 +1,99 @@
+---
+title: "Run Stan model"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+
+suppressPackageStartupMessages({
+  library(tidyverse) # CRAN
+  library(here) # CRAN
+  library(DT) # CRAN
+  library(stats)
+  library(gdata)
+  library(magrittr)
+  library(stringr)
+  # library(rstan)
+  library(cmdstanr)
+  library(posterior)
+  library(bayesplot)
+})
+```
+
+# set up cmdStanR
+```{r}
+parallelly::availableCores()
+options(mc.cores = 16)
+```
+
+```{r}
+check_cmdstan_toolchain(fix = TRUE, quiet = TRUE)
+color_scheme_set("brightblue")
+check_cmdstan_toolchain()
+```
+
+```{r}
+install_cmdstan(cores = 2)
+```
+
+```{r}
+cmdstan_path()
+cmdstan_version()
+```
+
+# load stan data and other parameters
+```{r}
+stan.data <- readRDS("Stan/stanData.rds")
+
+nIter <- 100
+nWarmup <- 50
+nChains <- 1
+nCores <- getOption("mc.cores", 1)
+treeDepth <- 15
+```
+
+# cmdstanr
+## compile model (cmdstanr)
+```{r}
+file <- file.path("Stan", "model", "test3.stan")
+model <- cmdstan_model(stan_file = file)
+```
+
+```{r}
+model$print()
+model$exe_file()
+```
+
+## MCMC 
+```{r}
+fit.mcmc <- model$sample(
+  data = stan.data,
+  seed = 719,
+  refresh = 10,
+  chains = nChains,
+  parallel_chains = getOption("mc.cores", 1),
+  iter_warmup = nWarmup,
+  iter_sampling = nIter,
+  max_treedepth = treeDepth
+)
+```
+
+## Optimization
+```{r}
+fit.optim <- model$optimize(
+  data = stan.data,
+  seed = 719,
+  refresh = 5,
+  algorithm = "lbfgs",
+  tol_param = 1e-7,
+  iter = 50
+)
+```
+
+## ADVI
+```{r}
+
+```

@@ -13,32 +13,183 @@ suppressPackageStartupMessages({
   library(here) # CRAN
   library(DT) # CRAN
   library(stats)
-  library(magrittr)
   library(gdata)
-  library(rstan)
+  library(magrittr)
+  library(stringr)
+  # library(rstan)
+  library(cmdstanr)
+  library(posterior)
+  library(bayesplot)
 })
 ```
 
-# load stan data and other parameters
+```{r}
+parallelly::availableCores()
+options(mc.cores = 16)
+```
 
+```{r}
+check_cmdstan_toolchain(fix = TRUE, quiet = TRUE)
+color_scheme_set("brightblue")
+check_cmdstan_toolchain()
+```
+
+```{r}
+install_cmdstan(cores = 2)
+```
+
+```{r}
+cmdstan_path()
+cmdstan_version()
+```
+
+# load stan data and other parameters
 ```{r}
 stan.data <- readRDS("Stan/stanData.rds")
 
-nIter <- 500
-nWarmup <- 100
+nIter <- 100
+nWarmup <- 50
 nChains <- 1
-nCores <- 16
+nCores <- getOption("mc.cores", 1)
 treeDepth <- 15
 ```
 
-# compile model
+# cmdstanr
+## compile model (cmdstanr)
+```{r}
+paste0(
+"
+functions {
+  
+}
 
+data {
+  int<lower = 1> C;    // number of cell types
+", 
+(paste0("
+  int<lower = 1> N_", celltypes, ";   // number of cells 
+  int<lower = 1> P_", celltypes, ";   // number of patients
+  int<lower = 1> K_", celltypes, ";   // number of signatures
+  matrix[N_", celltypes, ", K_", celltypes, "] y_", celltypes, ";     // signature loading matrix
+") %>% str_flatten()), 
+"
+  //array[N] int<lower = 1, upper = P> x;    // patient id for single-cells 
+}
+
+transformed data {
+  //matrix[N, K] y;
+  //y = Y / sd(Y);
+
+  int<lower = 1> K;
+  K = 0", 
+(paste0(
+  " + K_", celltypes
+) %>% str_flatten()), ";  
+}
+
+parameters {
+", 
+(paste0("
+  vector<lower = 0>[K_", celltypes, "] mu_", celltypes, ";
+  cov_matrix[K_", celltypes, "] cov_", celltypes, ";
+") %>% str_flatten()), 
+"
+  vector<lower = 0>[K] mu;
+  cov_matrix[K] cov_ext;
+}
+
+transformed parameters {
+  vector<lower = 0>[K] theta;
+  theta = append_row(mu_mono, mu_act_ste);
+}
+
+model {
+  
+  //prior 
+  target += normal_lpdf(mu | 0, 10);
+  target += inv_wishart_lpdf(cov_ext | K, diag_matrix(rep_vector(1.0, K)));
+
+  target += inv_wishart_lpdf(cov_mono | K_mono, diag_matrix(rep_vector(1.0, K_mono)));
+  target += inv_wishart_lpdf(cov_act_ste | K_act_ste, diag_matrix(rep_vector(1.0, K_act_ste)));
+  
+  //likelihood
+  target += multi_normal_lpdf(theta | mu, cov_ext); 
+
+  for (n in 1:N_mono) {
+	target += multi_normal_lpdf(y_mono[n] | mu_mono, cov_mono);
+  }
+  for (n in 1:N_act_ste) {
+	target += multi_normal_lpdf(y_act_ste[n] | mu_act_ste, cov_act_ste);
+  }
+  
+}
+
+generated quantities {
+
+} // The posterior predictive distribution
+"
+) %>% write_stan_file(dir = "Stan/model")
+```
+
+```{r}
+
+```
+
+```{r}
+file <- file.path("Stan", "model", "test3.stan")
+model <- cmdstan_model(stan_file = file)
+```
+
+```{r}
+model$print()
+model$exe_file()
+```
+
+## MCMC 
+```{r}
+fit.mcmc <- model$sample(
+  data = stan.data,
+  seed = 719,
+  refresh = 10,
+  chains = nChains,
+  parallel_chains = getOption("mc.cores", 1),
+  iter_warmup = nWarmup,
+  iter_sampling = nIter,
+  max_treedepth = treeDepth
+)
+```
+
+## Optimization
+```{r}
+fit.optim <- model$optimize(
+  data = stan.data,
+  seed = 719,
+  refresh = 5,
+  algorithm = "lbfgs",
+  tol_param = 1e-7,
+  iter = 50
+)
+```
+
+## ADVI
+```{r}
+
+```
+
+
+
+
+
+
+
+
+# rstan
+## compile model (rstan)
 ```{r}
 stanc("Stan/model/test1.stan")
 ```
 
-# fit stan
-
+## fit stan (rstan)
 ```{r}
 fit.stan <- stan(file = "Stan/model/test1.stan",
                  data = stan.data,
@@ -46,3 +197,14 @@ fit.stan <- stan(file = "Stan/model/test1.stan",
                  warmup = nWarmup, iter = nIter,
                  chains = nChains, cores = nCores, thin = 1)
 ```
+
+```{r}
+saveRDS(fit.stan, file = "Stan/fit/stanFit.rds")
+```
+
+
+
+
+
+
+

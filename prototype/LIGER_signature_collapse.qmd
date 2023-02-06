@@ -1,0 +1,155 @@
+---
+title: "LIGER signature collapse"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+})
+```
+
+```{r}
+celltype <- "ductal"
+```
+
+# load signatures
+```{r}
+gene_loading <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-gene-loading-validated.tsv"))
+sig_loading <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-signature-loading-validated.tsv"))
+```
+
+# load collapse guide
+```{r}
+collapse_guide <- read_csv("../resources/cell-type-signature/signature-analysis/signature_collapse_guide.csv")
+```
+
+```{r}
+collapse_guide <- collapse_guide %>%
+  filter(grepl(celltype, validation.sig.name))
+```
+
+```{r}
+sigs_to_collapse <- collapse_guide %>%
+  filter(grepl("\\|", validated.sig.name))
+
+sigs_to_collapse <- str_split(sigs_to_collapse$validated.sig.name, " \\| ", simplify = T)
+sigs_to_collapse <- sigs_to_collapse %>% t() %>% as.data.frame() %>% as.list()
+```
+
+# extract signatures to collapse
+```{r}
+sigs_to_collapse.df <- lapply(sigs_to_collapse, function(l) {
+  sigs <- str_subset(l, ".+")
+  list(
+    w = gene_loading %>% select(all_of(sigs)),
+    h = sig_loading %>% select(all_of(sigs))
+  )
+})
+names(sigs_to_collapse.df) <- sapply(sigs_to_collapse, function(l) l[1])
+```
+
+# get y (explained expression)
+```{r}
+y.list <- lapply(sigs_to_collapse.df, function(sigs) {
+  h = sigs$h %>% as.matrix()
+  w = sigs$w %>% as.matrix() %>% t()
+  y = h %*% w
+  y
+})
+```
+
+# get x (mean gene loading)
+```{r}
+x.list <- lapply(sigs_to_collapse.df, function(sigs) {
+  w = sigs$w %>% as.matrix()
+  x = rowMeans(w)
+  x
+})
+```
+
+# get g (collapsed signature loading)
+```{r}
+g.list <- lapply(seq(length(y.list)), function(sig.id) {
+  y.mtx = y.list[[sig.id]]
+  x = x.list[[sig.id]]
+  
+  apply(y.mtx, 1, function(y) {
+    the.fit <- lm(y ~ 0 + x)
+    coefficients(the.fit) %>% as.numeric()
+  })
+})
+names(g.list) <- names(y.list)
+```
+
+# remove old signatures
+```{r}
+sigs_to_remove <- sigs_to_collapse %>% unlist() %>% unname() %>% str_subset(".+")
+```
+
+```{r}
+sig_loading_new <- sig_loading %>% 
+  select(contains(celltype)) %>%
+  select(-all_of(sigs_to_remove))
+
+gene_loading_new <- gene_loading %>%
+  select(contains(celltype)) %>%
+  select(-all_of(sigs_to_remove))
+```
+
+# add collapsed signatures
+```{r}
+newsig_names <- collapse_guide %>%
+  filter(grepl("\\|", validated.sig.name))
+newsig_names <- gsub(" ", "", newsig_names$validated.sig.name)
+```
+
+```{r}
+names(g.list) <- newsig_names
+names(x.list) <- newsig_names
+```
+
+```{r}
+sig_loading_new <- cbind(sig_loading_new, as.data.frame(g.list))
+gene_loading_new <- cbind(gene_loading_new, as.data.frame(x.list))
+```
+
+# map old signature names to new signature names
+```{r}
+oldsig_names <- names(gene_loading_new)
+oldsig_names
+```
+
+```{r}
+newsig_names <- paste(celltype, "Rep", seq(length(oldsig_names)), sep = " ")
+newsig_names
+```
+
+```{r}
+signames.df <- data.frame(before.collapse = oldsig_names,
+                          after.collapse = newsig_names)
+```
+
+```{r}
+names(gene_loading_new) <- signames.df$after.collapse
+names(sig_loading_new) <- signames.df$after.collapse
+```
+
+# add information to the new loading matrices
+```{r}
+gene_loading_new <- cbind(gene_loading_new, gene_loading %>% select(-contains(celltype)))
+sig_loading_new <- cbind(sig_loading_new, sig_loading %>% select(-contains(celltype)))
+```
+
+
+
+
+
+
