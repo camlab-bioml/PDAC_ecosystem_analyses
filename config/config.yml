@@ -4,7 +4,7 @@ data:
   sce: 'data/sces/pipeline-output/'
   doublet_detection_results: 'data/doublet-detection/'
   reference: 'data/references/'
-  cell_type_markers: 'resources/markers/PDAC_cell_type_markers.yml'
+  # cell_type_markers: 'resources/markers/PDAC_cell_type_markers.yml'
 
 celltype_annot_resource_dir: "resources/cell-type-assignment/"
 
@@ -32,6 +32,7 @@ azimuth:
   redim_metadata_to_color: 'sample'
   sce_assay_to_plot: 'logcounts'
 
+pdac_cell_type_markers: 'resources/markers/PDAC_cell_type_markers.yml'
 celltypes_csv: "resources/cell-type-assignment/pancreas_cell_types.csv"
 
 infercnv:
@@ -39,7 +40,6 @@ infercnv:
   obs_cohorts: "resources/cell-type-assignment/infercnv/obs_cohorts.csv"
   ref_cohort: 'PengNormTissue'
   celltype: 'ductal'
-
 
 singler:
   celltypes_focused: "resources/cell-type-assignment/cell_types_to_zoom_in.csv"
@@ -51,10 +51,15 @@ singler:
 
 immune_cell_type_markers: "resources/markers/immune_cell_type_markers.yml" # from Michaels' whatsthatcell marker list
 
+visualize_these_cohorts_together: 'resources/cell-type-assignment/combined_visualization_cohorts.csv'
+
+
+
 liger:
   celltypes_for_signature: "resources/cell-type-signature/signature-extraction/cell_types_for_signature.csv"
   discovery_cohort_list: "resources/cell-type-signature/signature-extraction/discovery_cohorts.csv"
   validation_cohort_list: "resources/cell-type-signature/signature-extraction/validation_cohorts.csv"
+  sample_cell_count_thres: 10
   seedlist: "resources/cell-type-signature/signature-extraction/seedlist.csv"
   parameter_range: "resources/cell-type-signature/signature-extraction/parameter_range.csv"
   parameterlist: "resources/cell-type-signature/signature-extraction/parameterlist.csv"
@@ -68,8 +73,12 @@ signatures:
   minkowski_p: 1
   dist_thres: 25000
   validation_metric_to_use: 'corr'
+  signature_collapse_guide: "resources/cell-type-signature/signature-analysis/signature_collapse_guide.csv"
   known_signature_markers_dir: 'resources/markers/known-signature-markers/'
   known_signature_markers_file_pattern: '_list.csv'
+  num_top_genes_for_overlap_test: 50
+  pvalue_cutoff_for_overlap_test: 0.05
+  gsea_maxGSSize: 500
   analyze_sig_loading: TRUE
   compute_sig_loading_quantiles: TRUE
   sig_activation_threshold_quantile: 0.75

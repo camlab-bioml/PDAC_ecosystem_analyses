@@ -55,7 +55,7 @@ def get_liger_param(parameterlist, celltype, param):
 	return list(ct_parameterlist[param])[0]
 
 # Get list of markers
-markers = yaml.safe_load(open(config['data']['cell_type_markers']))
+markers = yaml.safe_load(open(config['pdac_cell_type_markers']))
 unique_markers = []
 for i in markers:
     for j in markers[i]:
@@ -91,6 +91,15 @@ results = {
 	'cell_type_prediction_score_UMAP_plot': expand(figureoutput + 'Azimuth-annotation/celltype-prediction-score/UMAP-celltype-prediction-score-{cohort}.png', cohort = cohorts),
 	'cell_type_prediction_score_heatmap': expand(figureoutput + 'Azimuth-annotation/celltype-prediction-score/heatmap-celltype-prediction-score-{cohort}.png', cohort = cohorts),
 }
+
+if (config['visualize_these_cohorts_together'] is not None) & os.path.isfile(config['visualize_these_cohorts_together']): 
+	# Visualize cell type labels predicted by Azimuth for all cohorts in one plot
+	cohorts_together = pd.read_csv(config['visualize_these_cohorts_together'], header = 0)
+	cohorts_together = list(cohorts_together['cohort'])
+
+	colour_field = ['cohort', 'celltype']
+
+	results['combined_UMAP_plots'] = expand(figureoutput + 'Azimuth-annotation/annotated-dimred/cohort-combined-plots/UMAP-{field}-all-cohorts.png', field = colour_field) 
 
 if unique_markers:
 	results['cell_type_marker_plot'] = expand(figureoutput + 'Azimuth-annotation/celltype-markers/{cohort}/{marker}.png', cohort = cohorts, marker = unique_markers)
@@ -219,11 +228,61 @@ if (config['liger']['celltypes_for_signature'] is not None) & os.path.isfile(con
 			results['LIGER_validated_gene_loading_matrix'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv', subtype = ct_extract)
 
 			analysis_conditions = conditions + ['validated']
+			manipulated_conditions = ['validated']
+
+			if (config['signatures']['signature_collapse_guide'] is not None) & os.path.isfile(config['signatures']['signature_collapse_guide']):
+				results['LIGER_collapsed_signature_loading_matrix'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-collapsed.tsv', subtype = ct_extract)
+				results['LIGER_collapsed_gene_loading_matrix'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv', subtype = ct_extract)
+
+				analysis_conditions = analysis_conditions + ['collapsed']
+				manipulated_conditions = manipulated_conditions + ['collapsed']
 
 			results['LIGER_signature_top_gene_loading_matrix_combined'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.tsv', subtype = ct_extract)
 			results['LIGER_signature_top_gene_loading_heatmap'] = expand(figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.png', subtype = ct_extract)
-			results['LIGER_signature_top_gene_loading_matrix_combined_validated'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-validated.tsv', subtype = ct_extract)
-			results['LIGER_signature_top_gene_loading_heatmap_validated'] = expand(figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-validated.png', subtype = ct_extract)
+			results['LIGER_signature_top_gene_loading_matrix_combined_manipulated'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.tsv', subtype = ct_extract, condition = manipulated_conditions)
+			results['LIGER_signature_top_gene_loading_heatmap_manipulated'] = expand(figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.png', subtype = ct_extract, condition = manipulated_conditions)
+
+			results['LIGER_signature_geneuniverse'] = []
+			results['LIGER_signature_overrepresentation_GO'] = []
+			results['LIGER_signature_overrepresentation_KEGG'] = []
+			results['LIGER_signature_GSEA_GO'] = []
+			results['LIGER_signature_overrepresentation_GO_plot'] = []
+			results['LIGER_signature_overrepresentation_KEGG_plot'] = []
+			results['LIGER_signature_GSEA_GO_plot'] = []
+
+			results['LIGER_signature_known_markers_loading_matrix_combined'] = []
+			results['LIGER_signature_known_markers_gom'] = []
+			results['LIGER_signature_known_markers_loading_heatmap'] = []
+			results['LIGER_signature_known_markers_gom_heatmap'] = []
+
+			for ct in ct_extract:
+				parameterlist_with_idx = parameterlist.set_index('celltype')
+				ct_k = parameterlist_with_idx.loc[ct, 'k']
+				ct_k_list = list(map(str, np.arange(1, ct_k+1).tolist()))
+
+				results['LIGER_signature_geneuniverse'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/' + ct + '-signature-geneuniverse-{condition}.rds', condition = analysis_conditions))
+				
+				results['LIGER_signature_overrepresentation_GO'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-GO.rds', k = ct_k_list, condition = analysis_conditions))
+				results['LIGER_signature_overrepresentation_KEGG'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-KEGG.rds', k = ct_k_list, condition = analysis_conditions))
+				results['LIGER_signature_GSEA_GO'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/GSEA/{condition}/' + ct + '-signature-{k}-GSEA-GO.rds', k = ct_k_list, condition = analysis_conditions))
+
+				results['LIGER_signature_overrepresentation_GO_plot'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-GO.png', k = ct_k_list, condition = analysis_conditions))
+				results['LIGER_signature_overrepresentation_KEGG_plot'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-KEGG.png', k = ct_k_list, condition = analysis_conditions))
+				results['LIGER_signature_GSEA_GO_plot'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/GSEA/{condition}/' + ct + '-signature-{k}-GSEA-GO.png', k = ct_k_list, condition = analysis_conditions))
+
+				if(os.path.isdir(config['signatures']['known_signature_markers_dir'] + ct)):
+					if(len(os.listdir(config['signatures']['known_signature_markers_dir'] + ct)) != 0):
+						marker_files = os.listdir(config['signatures']['known_signature_markers_dir'] + ct)
+						marker_lists = [i.split(config['signatures']['known_signature_markers_file_pattern'], 1)[0] for i in marker_files]
+
+						results['LIGER_signature_known_markers_loading_matrix_combined'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading.tsv', marker_list = marker_lists))
+						results['LIGER_signature_known_markers_loading_matrix_combined'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading-{condition}.tsv', marker_list = marker_lists, condition = manipulated_conditions))
+						results['LIGER_signature_known_markers_gom'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-overlap/' + ct + '-{marker_list}-geneoverlap-matrix-{condition}.rds', marker_list = marker_lists, condition = manipulated_conditions))
+
+						results['LIGER_signature_known_markers_loading_heatmap'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading-{filter}.png', marker_list = marker_lists, filter = ['full', 'cleaned']))
+						results['LIGER_signature_known_markers_loading_heatmap'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading-{filter}-{condition}.png', marker_list = marker_lists, filter = ['full', 'cleaned'], condition = manipulated_conditions))
+						results['LIGER_signature_known_markers_gom_heatmap'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-overlap/' + ct + '-{marker_list}-geneoverlap-{stat}-{condition}.png', marker_list = marker_lists, stat = ['oddsratio', 'jaccardindex'], condition = manipulated_conditions))
+
 
 			if config['signatures']['analyze_sig_loading']:
 				results['LIGER_signature_loading_matrix_long_form'] = expand(resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-analysis/{condition}/{subtype}-signature-loading-long-form-{condition}.tsv', subtype = ct_extract, condition = analysis_conditions)
@@ -270,46 +329,20 @@ if (config['liger']['celltypes_for_signature'] is not None) & os.path.isfile(con
 					ct_for_patient_profile = pd.read_csv(config['patient_profiles']['profile_ct_config'], header = 0)
 					compartments = list(ct_for_patient_profile.keys())
 
-					patient_profile_flavors = ['top-frequency', 'loading-mean']
+					patient_profile_flavors = sig_profiles
 					
-					#results['LIGER_patient_signature_profiles'] = expand(resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-{profile}-{condition}.tsv', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
+					results['LIGER_patient_signature_profiles'] = expand(resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-{profile}-{condition}.tsv', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
+					results['LIGER_patient_signature_profiles_longform'] = expand(resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-longform-{profile}-{condition}.tsv', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
+					results['LIGER_patient_signature_profiles_correlation'] = expand(resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-correlation-{profile}-{condition}.tsv', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
 
-			results['LIGER_signature_geneuniverse'] = []
-			results['LIGER_signature_overrepresentation_GO'] = []
-			results['LIGER_signature_overrepresentation_KEGG'] = []
-			results['LIGER_signature_GSEA_GO'] = []
-			results['LIGER_signature_overrepresentation_GO_plot'] = []
-			results['LIGER_signature_overrepresentation_KEGG_plot'] = []
-			results['LIGER_signature_GSEA_GO_plot'] = []
+					heatmap_groupings = ['grouped', 'clustered']
+					
+					results['LIGER_patient_signature_profiles_heatmap'] = expand(figureoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-{profile}-{condition}-heatmap-{grouping}.png', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors, grouping = heatmap_groupings)
+					results['LIGER_patient_signature_profiles_corrplot'] = expand(figureoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-{profile}-{condition}-corrplot.png', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
+					results['LIGER_patient_signature_profiles_stacked_bar_plot'] = expand(figureoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-{profile}-{condition}-stacked-bar-plot.png', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
+					results['LIGER_patient_signature_profiles_circlized_bar_plot'] = expand(figureoutput + 'LIGER/patient-analysis/patient-signature-profiles/{condition}/{profile}/patient-{compartment}-signature-profiles-{profile}-{condition}-circlized-bar-plot.png', condition = analysis_conditions, compartment = compartments, profile = patient_profile_flavors)
 
-			results['LIGER_signature_known_markers_loading_matrix_combined'] = []
-			results['LIGER_signature_known_markers_loading_heatmap'] = []
-
-			for ct in ct_extract:
-				parameterlist_with_idx = parameterlist.set_index('celltype')
-				ct_k = parameterlist_with_idx.loc[ct, 'k']
-				ct_k_list = list(map(str, np.arange(1, ct_k+1).tolist()))
-
-				results['LIGER_signature_geneuniverse'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/' + ct + '-signature-geneuniverse-{condition}.rds', condition = analysis_conditions))
-				
-				results['LIGER_signature_overrepresentation_GO'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-GO.rds', k = ct_k_list, condition = analysis_conditions))
-				results['LIGER_signature_overrepresentation_KEGG'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-KEGG.rds', k = ct_k_list, condition = analysis_conditions))
-				results['LIGER_signature_GSEA_GO'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/GSEA/{condition}/' + ct + '-signature-{k}-GSEA-GO.rds', k = ct_k_list, condition = analysis_conditions))
-
-				results['LIGER_signature_overrepresentation_GO_plot'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-GO.png', k = ct_k_list, condition = analysis_conditions))
-				results['LIGER_signature_overrepresentation_KEGG_plot'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/overrepresentation-analysis/{condition}/' + ct + '-signature-{k}-overrepresentation-KEGG.png', k = ct_k_list, condition = analysis_conditions))
-				results['LIGER_signature_GSEA_GO_plot'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/enrichment-analysis/GSEA/{condition}/' + ct + '-signature-{k}-GSEA-GO.png', k = ct_k_list, condition = analysis_conditions))
-
-				if(os.path.isdir(config['signatures']['known_signature_markers_dir'] + ct)):
-					if(len(os.listdir(config['signatures']['known_signature_markers_dir'] + ct)) != 0):
-						marker_files = os.listdir(config['signatures']['known_signature_markers_dir'] + ct)
-						marker_lists = [i.split(config['signatures']['known_signature_markers_file_pattern'], 1)[0] for i in marker_files]
-
-						results['LIGER_signature_known_markers_loading_matrix_combined'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading.tsv', marker_list = marker_lists))
-						results['LIGER_signature_known_markers_loading_matrix_combined'].extend(expand(resultoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading-validated.tsv', marker_list = marker_lists))
-						results['LIGER_signature_known_markers_loading_heatmap'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading-{filter}.png', marker_list = marker_lists, filter = ['full', 'cleaned']))
-						results['LIGER_signature_known_markers_loading_heatmap'].extend(expand(figureoutput + 'LIGER/signature-analysis/' + ct + '/gene-loading-analysis/known-markers-loading/' + ct + '-{marker_list}-gene-loading-{filter}-validated.png', marker_list = marker_lists, filter = ['full', 'cleaned']))
-
+			
 
 ### [ IMPORT INDIVIDUAL SNAKEMAKE FILES ] #####
 # import snakemake sub-workflows
