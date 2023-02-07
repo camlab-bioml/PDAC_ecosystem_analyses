@@ -27,13 +27,13 @@ suppressPackageStartupMessages({
 # load data
 ```{r}
 # celltype <- "Mono"
-celltypes <- c("Mono", "activated_stellate")
-condition <- "validated"
+celltypes <- c("Mono", "stellate")
+condition <- "collapsed"
 ```
 
 ```{r}
 df.sig.list <- lapply(celltypes, function(ct) {
-  read_tsv(paste0(ct, "-signature-loading-", condition, ".tsv"))
+  read_tsv(paste0("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/output/v2/results/LIGER/signature-analysis/", ct, "/loading-matrices/", ct, "-signature-loading-", condition, ".tsv"))
 })
 names(df.sig.list) <- celltypes
 ```
@@ -50,9 +50,9 @@ df.sig.list <- lapply(df.sig.list, function(df.sig) {
 })
 
 table(df.sig.list$Mono$sample)
-table(df.sig.list$activated_stellate$sample)
+table(df.sig.list$stellate$sample)
 
-samples.common <- intersect(unique(df.sig.list$Mono$sample), unique(df.sig.list$activated_stellate$sample))
+samples.common <- intersect(unique(df.sig.list$Mono$sample), unique(df.sig.list$stellate$sample))
 ```
 
 # construct elements of Stan data list
@@ -83,11 +83,11 @@ stan.data <- list(
   K_mono = stan.data.list$Mono$K,
   y_mono = stan.data.list$Mono$y,
   x_mono = stan.data.list$Mono$x,
-  N_act_ste = stan.data.list$activated_stellate$N,
-  P_act_ste = stan.data.list$activated_stellate$P,
-  K_act_ste = stan.data.list$activated_stellate$K,
-  y_act_ste = stan.data.list$activated_stellate$y,
-  x_act_ste = stan.data.list$activated_stellate$x
+  N_ste = stan.data.list$stellate$N,
+  P_ste = stan.data.list$stellate$P,
+  K_ste = stan.data.list$stellate$K,
+  y_ste = stan.data.list$stellate$y,
+  x_ste = stan.data.list$stellate$x
 )
 ```
 
@@ -135,12 +135,12 @@ summary(stan.data$y_mono[,6])
 
 ## checking correlation between mean signature loadings per patient
 ```{r}
-holder.df <- cbind(stan.data$y_act_ste, stan.data$x_act_ste) %>% as.data.frame()
+holder.df <- cbind(stan.data$y_ste, stan.data$x_ste) %>% as.data.frame()
 names(holder.df) <- c(names(holder.df)[1:length(names(holder.df))-1], "sample")
 
 holder.df <- holder.df %>%
   group_by(sample) %>%
-  summarize(across(starts_with("activated_stellate"), mean, .names = "mean_{.col}"))
+  summarize(across(starts_with("stellate"), mean, .names = "mean_{.col}"))
 
 cor(holder.df[,-1], holder_mono.df[,-1])
 
