@@ -22,7 +22,7 @@ print(output)
 if(!dir.exists(individual_plots_dir)) dir.create(individual_plots_dir, recursive = T)
 
 if (!(mk %in% rownames(sce))) {
-  png(output, width = 1800,height = 1600)
+  png(output, width = 18, height = 16, units = "in", res = 321)
   plot.new()
   dev.off()
 } else {
@@ -65,24 +65,24 @@ if (!(mk %in% rownames(sce))) {
     labs(x = paste0(mk, " Expression"), y = "Predicted Score")
   
   # arrange plots for output
-  png(output, width = 1800, height = 1600)
+  png(output, width = 18, height = 16, units = "in", res = 321)
   print(p1 + p2 + p3 + p4 + plot_layout(ncol = 2))
   dev.off()
   
   # save individual plots
-  png(paste0(individual_plots_dir, "expression.png"), width = 900, height = 800)
+  png(paste0(individual_plots_dir, "expression.png"), width = 9, height = 8, units = "in", res = 321)
   print(p1)
   dev.off()
   
-  png(paste0(individual_plots_dir, "expression-density.png"), width = 900, height = 800)
+  png(paste0(individual_plots_dir, "expression-density.png"), width = 9, height = 8, units = "in", res = 321)
   print(p2)
   dev.off()
   
-  png(paste0(individual_plots_dir, "expression-violin.png"), width = 900, height = 800)
+  png(paste0(individual_plots_dir, "expression-violin.png"), width = 9, height = 8, units = "in", res = 321)
   print(p3)
   dev.off()
   
-  png(paste0(individual_plots_dir, "expression-vs-predicted-score.png"), width = 900, height = 800)
+  png(paste0(individual_plots_dir, "expression-vs-predicted-score.png"), width = 9, height = 8, units = "in", res = 321)
   print(p4)
   dev.off()
 }

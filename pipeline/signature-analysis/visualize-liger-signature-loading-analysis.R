@@ -19,6 +19,7 @@ sigtopfreq.df <- read_tsv(snakemake@input[['sig_top_freq']])
 condition <- snakemake@wildcards[['condition']] 
 if (condition == "validated") condition = snakemake@wildcards[['subtype']]
 if (condition == "collapsed") condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
+if (condition == "collapsed-scored-validation") condition = paste(snakemake@wildcards[['subtype']], "RepVal", sep = " ")
 
 # make quantile-quantile plot for signature loading
 p1 <- ggplot(H.norm.df, aes(sample = loading)) +
@@ -184,7 +185,7 @@ p15 <- ggplot(tmp.sigtopfreq.df, aes(x = sample, y = freq, fill = signature)) +
 
 png(filename = snakemake@output[['sig_top_freq_bar_plot']], width = 12, height = 7, units = "in", res = 300)
 p15 + 
-  plot_annotation(title = paste0("Frequency of top ", snakemake@wildcards[['subtype']], " signatures"))
+  plot_annotation(title = paste0("Frequency of top ", snakemake@wildcards[['subtype']], " signatures - Condition: ", condition))
 dev.off()
 
 rm(tmp.sigtopfreq.df)

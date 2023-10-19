@@ -57,6 +57,7 @@ known.marker.lists <- read_csv(snakemake@input[['marker_list']])
 
 ## for collapsed version of signatures
 if (snakemake@wildcards[['condition']] == "collapsed") celltype <- paste(celltype, "Rep", sep = " ")
+if (snakemake@wildcards[['condition']] == "collapsed-scored-validation") celltype <- paste(celltype, "RepVal", sep = " ")
 
 ## make named lists
 sig.top.genes <- lapply(seq(length(sig.gene.loading) - 1), function(sig) {

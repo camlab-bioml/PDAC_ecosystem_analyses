@@ -39,7 +39,7 @@ heatmap_full <- Heatmap(w.markers,
                         cluster_rows = F, 
                         row_split = row_split, 
                         row_title_rot = 90,
-                        row_title_gp = gpar(fontsize = 12),
+                        row_title_gp = gpar(fontsize = 11),
                         bottom_annotation = col_ha)
 
 heatmap_cleaned <- Heatmap(w.markers.cleaned, 
@@ -47,16 +47,16 @@ heatmap_cleaned <- Heatmap(w.markers.cleaned,
                            cluster_rows = T, 
                            row_split = row_split_cleaned, 
                            row_title_rot = 90,
-                           row_title_gp = gpar(fontsize = 12),
+                           row_title_gp = gpar(fontsize = 11),
                            bottom_annotation = col_ha)
 
 # save the plots
-png(snakemake@output[['sig_known_gene_loading_plot_full']], width = 7, height = 18, units = "in", res = 300)
+png(snakemake@output[['sig_known_gene_loading_plot_full']], width = 8, height = 20, units = "in", res = 321)
 draw(heatmap_full,
      merge_legend = T)
 dev.off()
 
-png(snakemake@output[['sig_known_gene_loading_plot_cleaned']], width = 7, height = 18, units = "in", res = 300)
+png(snakemake@output[['sig_known_gene_loading_plot_cleaned']], width = 8, height = 20, units = "in", res = 321)
 draw(heatmap_cleaned,
      merge_legend = T)
 dev.off()

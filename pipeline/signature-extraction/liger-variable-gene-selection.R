@@ -49,18 +49,18 @@ liger.dis <- selectGenes(liger.dis,
                          var.thresh = exprs.var.thres,
                          alpha.thresh = 0.99,
                          combine = "union",
-                         unshared = F, 
-                         unshared.datasets = NULL, 
-                         unshared.thresh= NULL,
+                         #unshared = F, 
+                         #unshared.datasets = NULL, 
+                         #unshared.thresh= NULL,
                          do.plot = F)
 
 liger.val <- selectGenes(liger.val, 
                          var.thresh = exprs.var.thres,
                          alpha.thresh = 0.99,
                          combine = "union",
-                         unshared = F, 
-                         unshared.datasets = NULL, 
-                         unshared.thresh= NULL,
+                         #unshared = F, 
+                         #unshared.datasets = NULL, 
+                         #unshared.thresh= NULL,
                          do.plot = F)
 
 # get common variable genes between discovery group and validation group 

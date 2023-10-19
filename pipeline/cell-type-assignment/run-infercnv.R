@@ -1,95 +1,72 @@
 suppressPackageStartupMessages({
-  library(magrittr)
-  library(tidyverse)
-  library(sjstats)
-  library(tidyr)
-  library(infercnv)
-  library(Matrix)
-  library(here)
-  library(SingleCellExperiment)
-  library(scater)
-  library(scran)
-  library(scales)
-  library(bluster)
+    library(infercnv)
+    library(SingleCellExperiment)
+    library(tibble)
+    library(dplyr)
+    library(tidyr)
+    library(argparse)
 })
 
-sce.tumor <- readRDS(snakemake@input[['sce_tumor']])
-sce.normal <- readRDS(snakemake@input[['sce_normal']])
-out.dir <- snakemake@params[['infercnv_outdir']]
+set.seed(123L)
 
-# label cells
-sce.normal$cell_type <- "Normal"
-sce.tumor$cell_type <- colData(sce.tumor)[[paste0("predicted.", snakemake@params[['annot_level']])]]
+sce <- readRDS(snakemake@input[["sce_combined"]])
 
-# combine some cell type labels
-sce.tumor$cell_type <- plyr::mapvalues(sce.tumor$cell_type, 
-                                       from = c("alpha", "beta", "delta", "gamma", "activated_stellate", "quiescent_stellate"),
-                                       to = c("endocrine", "endocrine", "endocrine", "endocrine", "stellate", "stellate"))
+sub_sample <- sce[, colData(sce)[["sample"]] == snakemake@wildcards[["sample"]] ]
 
-# tidy up metadata for cells
-common.coldata <- intersect(names(colData(sce.normal)), names(colData(sce.tumor)))
-colData(sce.normal) <- colData(sce.normal)[,common.coldata]
-colData(sce.tumor) <- colData(sce.tumor)[,common.coldata]
+## Some sanity checks
+stopifnot(ncol(sub_sample) > 10)
 
-reducedDims(sce.normal) <- NULL
-reducedDims(sce.tumor) <- NULL
+sce_tumour <- sub_sample[, colData(sub_sample)[["cell_type"]] == paste0("Tumour_", snakemake@wildcards[["celltype"]])]
 
-# tidy up genes for reference and observation 
-rownames(sce.normal) <- paste(rowData(sce.normal)[['Symbol']], rowData(sce.normal)[['ensembl_id']], sep = "_")
-rownames(sce.tumor) <- paste(rowData(sce.tumor)[['Symbol']], rowData(sce.tumor)[['ensembl_id']], sep = "_")
+sce_normal <- sce[, colData(sce)[["cell_type"]] == paste0("Normal_", snakemake@wildcards[["celltype"]])]
 
-common.gene <- intersect(rownames(sce.normal), rownames(sce.tumor))
-sce.normal <- sce.normal[common.gene,]
-sce.tumor <- sce.tumor[common.gene,]
+if(ncol(sce_normal) > 3000) {
+    sce_normal <- sce_normal[, sample(ncol(sce_normal), 3000)]
+}
 
-rownames(sce.normal) <- str_split(rownames(sce.normal), pattern = "_", simplify = T)[,1]
-rownames(sce.tumor) <- str_split(rownames(sce.tumor), pattern = "_", simplify = T)[,1]
+patient_sce <- cbind(sce_tumour, sce_normal)
 
-# combine SCEs
-sce.combined <- cbind(sce.tumor, sce.normal)
+print(dim(sce_tumour))
+print(dim(sce_normal))
+print(dim(patient_sce))
 
-# get the raw count matrix
-counts.mtx <- counts(sce.combined)
+cts <- assay(patient_sce, 'counts')
 
-# save the tumor annotation file
-write.table(colData(sce.combined)[,'cell_type', drop=F], file = paste0(out.dir, 'tumor_classes.txt'), sep="\t", col.names=FALSE, quote = FALSE)
+gene_symbols <- gsub("ENSG[0-9]*-", "", rownames(sce))
+count_mat <- as.matrix(assay(patient_sce, 'counts'))
+cts <- rowsum(count_mat, gene_symbols)
 
-# save the gene order file
-print(snakemake@input[['gene_order_file']])
-order_csv <-  read.csv(snakemake@input[['gene_order_file']], sep = '\t', header=FALSE)
-order_csv$V1 <- sapply(lapply(lapply(order_csv$V1, strsplit, "|", fixed=TRUE), '[[',1),'[',1)
-order_csv <- order_csv[!duplicated(order_csv$V1),,drop=FALSE]
+print("Count matrix successfully created")
+print(dim(cts))
 
-write.table(order_csv, file = paste0(out.dir, 'gene_order.txt'), sep="\t", col.names=FALSE, row.names=FALSE, quote = FALSE)
+cell_types <- colData(patient_sce)[,"cell_type", drop=FALSE] |> 
+    as.data.frame() 
+print(dim(cell_types))
 
-# create inferCNV object
-infer <- CreateInfercnvObject(
-  raw_counts_matrix= counts.mtx,
-  delim="\t",
-  annotations_file= paste0(out.dir, 'tumor_classes.txt'),
-  gene_order_file= paste0(out.dir, 'gene_order.txt'),
-  ref_group_names= c("Normal"))
+normal_cell_types <- (sce_normal$cell_type)[1]
 
-# run inferCNV
-infercnv_obj <- infercnv::run(
-  infercnv_obj = infer,
-  cutoff = 0.1, # cutoff=1 works well for Smart-seq2, and cutoff=0.1 works well for 10x Genomics
-  min_cells_per_gene = 3,
-  window_length = 101,
-  out_dir = out.dir,
-  cluster_by_groups = T, 
-  plot_steps = F,
-  denoise = T,
-  HMM = T,
-  HMM_type = "i6",
-  analysis_mode = "samples",
-  tumor_subcluster_partition_method = "leiden",
-  no_prelim_plot = T,
-  num_threads = as.numeric(snakemake@threads), 
-  png_res = 321,
-  resume_mode = T,
-  save_rds = F,
-  save_final_rds = T
-)
+print("Creating infercnv object")
+infer <- CreateInfercnvObject(cts, 
+    snakemake@input[["gene_order_file"]], 
+    cell_types, 
+    ref_group_names = normal_cell_types)
 
-
+print("Running infercnv")
+infercnv_obj <- infercnv::run(infer, 
+    cutoff = snakemake@params[['cutoff']], 
+    out_dir = snakemake@params[['infercnv_outdir']], 
+    cluster_by_groups = TRUE, 
+    analysis_mode = snakemake@params[['cnv_analysis_mode']], 
+    denoise = snakemake@params[['denoise']], 
+    sd_amplifier = ifelse(snakemake@params[['noise_logistic']], 3, 1.5), 
+    noise_logistic = snakemake@params[['noise_logistic']], 
+    tumor_subcluster_pval = 0.01,
+    HMM = TRUE, 
+    HMM_report_by = c('subcluster'), 
+    HMM_type = 'i6', 
+    BayesMaxPNormal = 0.5,
+    no_prelim_plot = TRUE, 
+    plot_steps = FALSE, 
+    num_threads = as.numeric(snakemake@threads),
+    leiden_resolution = snakemake@params[['leiden_res']], 
+    png_res = 360)

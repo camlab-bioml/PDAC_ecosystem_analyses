@@ -11,6 +11,7 @@ H.norm.df <- read_tsv(snakemake@input[['sig_loading_mtx']])
 condition <- snakemake@wildcards[['condition']] #%>% stringr::str_to_title()
 if (condition == "validated") condition = snakemake@wildcards[['subtype']]
 if (condition == "collapsed") condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
+if (condition == "collapsed-scored-validation") condition = paste(snakemake@wildcards[['subtype']], "RepVal", sep = " ")
 
 sig_activation_threshold_quantile <- snakemake@params[['sig_activation_threshold_quantile']]
 

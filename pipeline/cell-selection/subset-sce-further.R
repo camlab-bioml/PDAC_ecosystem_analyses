@@ -24,8 +24,12 @@ num_of_cells_before$condition <- paste0('Before subset to ', subtype)
 sce <- sce[,grepl(subtype, colData(sce)[[celltype_label_field]])]
 
 # Calculate the total number of cells per sample after subsetting
-num_of_cells_after <- as.data.frame(table(sce$sample))
-num_of_cells_after$condition <- paste0('After subset to ', subtype)
+if (ncol(sce) > 0) {
+  num_of_cells_after <- as.data.frame(table(sce$sample))
+  num_of_cells_after$condition <- paste0("After subset to ", cell_type)
+} else {
+  num_of_cells_after <- data.frame(Var1 = character(), Freq = numeric(), condition = character())
+}
 
 # plot grouped bar plot to show number of cells in each sample before and after subsetting
 num_of_cells <- bind_rows(num_of_cells_before, num_of_cells_after)
@@ -42,6 +46,9 @@ dev.off()
 
 print(paste0(sum(num_of_cells_before$Freq) - sum(num_of_cells_after$Freq), " cells removed by subsetting"))
 print(paste0(sum(num_of_cells_after$Freq), " cells kept by subsetting"))
+
+# magic that makes do_dimred (singleCellTK::runSeurat* functions) work
+sce <- SingleCellExperiment(assays = assays(sce), rowData = rowData(sce), colData = colData(sce), reducedDims = reducedDims(sce), altExps = altExps(sce))
 
 # if any cells were removed, redo PCA, Harmony, UMAP, and TSNE
 if (sum(num_of_cells_before$Freq) > sum(num_of_cells_after$Freq) & sum(num_of_cells_after$Freq > 20)) {

@@ -15,21 +15,21 @@ ncol_violin = snakemake@params[['ncol_violin']]
 celltype_label_field = snakemake@params[['celltype_label_field']]
 
 # plot SingleR predicted score for each cell type label
-png(snakemake@output[['heatmap_assignment_score']], width = 800, height = 1200)
+png(snakemake@output[['heatmap_assignment_score']], width = 8, height = 12, units = "in", res = 321)
 plotScoreHeatmap(pred, 
                  show.pruned = T, 
                  show.labels = T)
 dev.off()
 
 # plot distribution of delta between assigned label score and median score for single cells
-png(snakemake@output[['violin_delta_distribution']], width = 1200, height = 800)
+png(snakemake@output[['violin_delta_distribution']], width = 12, height = 8, units = "in", res = 321)
 plotDeltaDistribution(pred,
                       show = "delta.med",
                       ncol = ncol_violin)
 dev.off()
 
 # plot distribution of scores for each label, grouped by label status
-png(snakemake@output[['violin_score_distribution']], width = 1200, height = 800)
+png(snakemake@output[['violin_score_distribution']], width = 12, height = 8, units = "in", res = 321)
 plotScoreDistribution(pred,
                       ncol = ncol_violin)
 dev.off()
@@ -58,7 +58,7 @@ lapply(names(plist), function(ct) {
     dir.create(snakemake@params[['individual_celltype_marker_expression_heatmap_dir']], recursive = T)
   }
   png(paste0(snakemake@params[['individual_celltype_marker_expression_heatmap_dir']], 'heatmap-celltype-marker-expression-', ct,'.png'), 
-      width = 800, height = 2400)
+      width = 8, height = 24, units = "in", res = 321)
   print(plist[[ct]])
   dev.off()
 })

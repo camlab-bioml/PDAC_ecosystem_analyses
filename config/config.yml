@@ -1,23 +1,13 @@
-version: 'v2'
+version: 'v3'
 
 data:
   sce: 'data/sces/pipeline-output/'
   doublet_detection_results: 'data/doublet-detection/'
   reference: 'data/references/'
-  # cell_type_markers: 'resources/markers/PDAC_cell_type_markers.yml'
 
 celltype_annot_resource_dir: "resources/cell-type-assignment/"
 
-cohorts: 
-  - Lee
-  - Lin
-  - Peng
-  - Steele
-  - Toronto
-  - SteeleNormTissue
-  - PengNormTissue
-  - NormTissue
-  - Hwang
+cohorts: "resources/all_cohorts.csv"
 
 data_processing:
   sce_filtering: 
@@ -25,25 +15,34 @@ data_processing:
     detected_thresh: 500
     total_thresh: 1000
 
-azimuth:
-  reference: 'pancreasref'
-  annotation_level: 'annotation.l1' # only for pancreasref (for pbmcref annotation levels are celltype.l1, celltype.l2 (default), and celltype.l3)
-  redim_to_plot: 'ref.umap'
-  redim_metadata_to_color: 'sample'
-  sce_assay_to_plot: 'logcounts'
+# azimuth:
+#   reference: 'pancreasref'
+#   annotation_level: 'annotation.l1' # only for pancreasref (for pbmcref annotation levels are celltype.l1, celltype.l2 (default), and celltype.l3)
+#   redim_to_plot: 'ref.umap'
+#   redim_metadata_to_color: 'sample'
+#   sce_assay_to_plot: 'logcounts'
 
 pdac_cell_type_markers: 'resources/markers/PDAC_cell_type_markers.yml'
-celltypes_csv: "resources/cell-type-assignment/pancreas_cell_types.csv"
+celltypes_csv: "resources/cell-type-assignment/pdac_cell_types.csv"
 
 infercnv:
-  gene_order_file: "resources/cell-type-assignment/infercnv/gencode_v19_gen_pos.complete.txt"
-  obs_cohorts: "resources/cell-type-assignment/infercnv/obs_cohorts.csv"
-  ref_cohort: 'PengNormTissue'
-  celltype: 'ductal'
+  run_infercnv: TRUE
+  run_infercnv_cohorts: "resources/cell-type-assignment/infercnv/run_infercnv_cohorts.csv"
+  gene_order_file: "resources/cell-type-assignment/infercnv/hg38_gencode_v27.txt"
+  celltypes_for_infercnv: "resources/cell-type-assignment/infercnv/cell_types_for_infercnv.csv"
+  ref_cohort: 'NormTissue'
+  cutoff: 0.1
+  cnv_analysis_mode: 'subclusters'
+  denoise: TRUE
+  noise_logistic: TRUE
+  leiden_res: 0.1
+
 
 singler:
+  pdac_reference: 'data/references/pk_all.rds'
+  pdac_ref_label_field: 'celltype2'
   celltypes_focused: "resources/cell-type-assignment/cell_types_to_zoom_in.csv"
-  ncol_for_violin_plots: 8
+  ncol_for_violin_plots: 7
   redim_to_plot: 'TSNE_on_Harmony'
   redim_metadata_to_color: 'sample'
   celltype_label_field: 'singler.pruned.label'
@@ -53,7 +52,25 @@ immune_cell_type_markers: "resources/markers/immune_cell_type_markers.yml" # fro
 
 visualize_these_cohorts_together: 'resources/cell-type-assignment/combined_visualization_cohorts.csv'
 
+figure1:
+  make_figure1: TRUE
+  cell_type_rename_csv: "resources/cell-type-assignment/cell_types_to_rename_for_plot.csv"
+  metadata_plot_width: 15
+  metadata_plot_height: 5
+  dim_red_plot: "seuratUMAP"
+  umap_plot_width: 15
+  umap_plot_height: 15
+  stacked_bar_plot_width: 10
+  stacked_bar_plot_height: 15
+  figure1_width: 20
+  figure1_height: 15
 
+figure2:
+  make_figure2: TRUE
+  sig_interpretation: "resources/cell-type-signature/signature-analysis/signature_interpretation.xlsx"
+  ambient_sigs: "resources/cell-type-signature/signature-analysis/ambient_sigs.csv"
+  figure2_b_width: 22
+  figure2_b_height: 25
 
 liger:
   celltypes_for_signature: "resources/cell-type-signature/signature-extraction/cell_types_for_signature.csv"
@@ -66,25 +83,47 @@ liger:
   exprssion_variation_threshold: 0.1
 
 signatures:
-  num_top_genes: 5
+  num_top_genes: 10
   corr_method: 'spearman'
-  corr_thres: 0.4
+  corr_thres: 0.5
   dist_method: 'minkowski'
   minkowski_p: 1
   dist_thres: 25000
   validation_metric_to_use: 'corr'
-  signature_collapse_guide: "resources/cell-type-signature/signature-analysis/signature_collapse_guide.csv"
+  num_sim: 1000
+  collapse_corr_threshold: 0.4
+  #signature_collapse_guide: "resources/cell-type-signature/signature-analysis/signature_collapse_guide.csv"
+  score_each_validation_cohort: TRUE
+  assay_used_for_scoring: 'seuratNormData'
+  cohort_correct_weight: 1
   known_signature_markers_dir: 'resources/markers/known-signature-markers/'
   known_signature_markers_file_pattern: '_list.csv'
-  num_top_genes_for_overlap_test: 50
+  num_top_genes_for_overlap_test: 50 # from Hwang paper?
   pvalue_cutoff_for_overlap_test: 0.05
   gsea_maxGSSize: 500
   analyze_sig_loading: TRUE
   compute_sig_loading_quantiles: TRUE
   sig_activation_threshold_quantile: 0.75
   get_sig_loading_profiles: TRUE
+  signature_profile_flavours: "resources/cell-type-signature/signature-analysis/signature_profile_flavours.csv"
 
 patient_profiles:
   build_patient_profiles: TRUE
   profile_ct_config: 'resources/patient-profiles/compartment_celltypes.csv'
-  
+  compare_collapsed_and_rescored_validation_per_cohort: TRUE
+  signature_correlation_comparison: TRUE
+
+stan:
+  run_stan: TRUE
+  stan_ct_config: 'resources/stan/stan_celltypes.csv'
+  stan_param_config: 'resources/stan/stan_parameters.csv'
+  #number_of_niches: 4
+  min_number_of_cells_per_sample: 20
+  max_number_of_cells_per_sample: 1000
+  stan_model_basename: 'version-2'
+  nReps: 5
+  #nIter: 1000
+  nWarmup: 500
+  nChains: 4
+  treeDepth: 15
+  lambda_for_orthogonality: 1000

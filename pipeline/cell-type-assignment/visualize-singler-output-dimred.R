@@ -34,7 +34,7 @@ p2 <- plotReducedDim(sce,
 # p1 + p2 + plot_layout(ncol = 2)
 # dev.off()
 
-ggsave(snakemake@output[['dimred_cell_type']], (p1 + p2 + plot_layout(ncol = 2)), width = 14, height = 7, units = "in")
+ggsave(snakemake@output[['dimred_cell_type']], (p1 + p2 + plot_layout(ncol = 2)), device = "png", width = 14, height = 7, units = "in", dpi = "retina")
 
 # plot
 celltypes <- score_dframe@listData$scores %>% colnames()
@@ -56,7 +56,7 @@ lapply(celltypes, function(celltype) {
   # print(plist[[celltype]])
   # dev.off()
   
-  ggsave(paste0(individual_dimred_plot_dir, dimred, "-celltype-assignment-score-", celltype, ".png"), plist[[celltype]], width = 7, height = 7, units = "in")
+  ggsave(paste0(individual_dimred_plot_dir, dimred, "-celltype-assignment-score-", celltype, ".png"), (p1 + plist[[celltype]] + plot_layout(ncol = 2)), device = "png", width = 14, height = 7, units = "in", dpi = "retina")
 })
 
 

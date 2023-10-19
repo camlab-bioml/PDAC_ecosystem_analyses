@@ -9,8 +9,8 @@ rule process_sce:
 		cells_per_sample_plot = figureoutput + 'process-sce/number-of-cells-{cohort}.png',
 		cells_per_sample = resultoutput + 'process-sce/number-of-cells-{cohort}.tsv',
 	resources:
-		mem_mb = 20000
-	threads: 10
+		mem_mb = 25000
+	threads: 12
 	script:
 		'process-data/process-sce.R'
 

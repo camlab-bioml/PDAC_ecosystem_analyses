@@ -14,6 +14,8 @@ profile.flavor = snakemake@wildcards[['profile']]
 condition = snakemake@wildcards[['condition']]
 compartment = snakemake@wildcards[['compartment']]
 
+ht_sig_names_size = 10
+
 # load patient profiles
 sigprofile.df <- read_tsv(snakemake@input[['patient_profiles']])
 sigprofile.df.long <- read_tsv(snakemake@input[['patient_profiles_long']])
@@ -25,30 +27,98 @@ sigprofile.mtx <- sigprofile.df %>% select(!c(cohort, sample)) %>% as.matrix()
 
 # simple heatmap ---------------------------------------------------------------
 row_ha <- rowAnnotation(Cohort = sigprofile.df$cohort)
-col_ha <- columnAnnotation(Celltype = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
 
-png(snakemake@output[['patient_profiles_heatmap_grouped']], width = 12, height = 7, units = "in", res = 321)
-Heatmap(sigprofile.mtx %>% scale(), 
-        name = paste("Norm sig", profile.flavor, sep = " "),
-        #left_annotation = row_ha, 
-        row_split = sigprofile.df$cohort,
-        #top_annotation = col_ha,
-        column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1]
-        )
-dev.off()
+if (condition == "collapsed") {
+  col_ha <- columnAnnotation(Celltype = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " Rep ", simplify = T))[,1])
+} else {
+  col_ha <- columnAnnotation(Celltype = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
+}
 
-png(snakemake@output[['patient_profiles_heatmap_clustered']], width = 12, height = 7, units = "in", res = 321)
-Heatmap(sigprofile.mtx %>% scale(), 
-        name = paste("Norm sig", profile.flavor, sep = " "),
-        left_annotation = row_ha, 
-        #row_split = sigprofile.df$cohort,
-        top_annotation = col_ha,
-        #column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1]
-        )
-dev.off()
+tryCatch({
+  ht <- Heatmap(sigprofile.mtx %>% scale(), 
+                name = paste("Scaled signature", profile.flavor, sep = " "),
+                column_names_gp = gpar(fontsize = ht_sig_names_size),
+                #left_annotation = row_ha, 
+                row_split = sigprofile.df$cohort,
+                #top_annotation = col_ha,
+                column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
+  png(snakemake@output[['patient_profiles_heatmap_grouped']], width = 15, height = 7, units = "in", res = 321)
+  draw(ht)
+  dev.off()
+}, error = function(e) {
+  tryCatch({
+    ht <- Heatmap(sigprofile.mtx %>% scale(), 
+                  name = paste("Scaled signature", profile.flavor, sep = " "),
+                  column_names_gp = gpar(fontsize = ht_sig_names_size),
+                  #left_annotation = row_ha, 
+                  row_split = sigprofile.df$cohort,
+                  cluster_rows = F,
+                  #top_annotation = col_ha,
+                  column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
+    png(snakemake@output[['patient_profiles_heatmap_grouped']], width = 15, height = 7, units = "in", res = 321)
+    draw(ht)
+    dev.off()
+  }, error = function(e) {
+    ht <- Heatmap(sigprofile.mtx %>% scale(), 
+                  name = paste("Scaled signature", profile.flavor, sep = " "),
+                  column_names_gp = gpar(fontsize = ht_sig_names_size),
+                  #left_annotation = row_ha, 
+                  row_split = sigprofile.df$cohort,
+                  cluster_rows = F,
+                  #top_annotation = col_ha,
+                  column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1],
+                  cluster_columns = F)
+    png(snakemake@output[['patient_profiles_heatmap_grouped']], width = 15, height = 7, units = "in", res = 321)
+    draw(ht)
+    dev.off()
+  })
+})
+
+tryCatch({
+  ht <- Heatmap(sigprofile.mtx %>% scale(), 
+                name = paste("Scaled signature", profile.flavor, sep = " "),
+                column_names_gp = gpar(fontsize = ht_sig_names_size),
+                left_annotation = row_ha, 
+                #row_split = sigprofile.df$cohort,
+                top_annotation = col_ha,
+                #column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1]
+  )
+  png(snakemake@output[['patient_profiles_heatmap_clustered']], width = 15, height = 7, units = "in", res = 321)
+  draw(ht)
+  dev.off()
+}, error = function(e) {
+  tryCatch({
+    ht <- Heatmap(sigprofile.mtx %>% scale(), 
+                  name = paste("Scaled signature", profile.flavor, sep = " "),
+                  column_names_gp = gpar(fontsize = ht_sig_names_size),
+                  left_annotation = row_ha, 
+                  #row_split = sigprofile.df$cohort,
+                  cluster_rows = F,
+                  top_annotation = col_ha,
+                  #column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1]
+    )
+    png(snakemake@output[['patient_profiles_heatmap_clustered']], width = 15, height = 7, units = "in", res = 321)
+    draw(ht)
+    dev.off()
+  }, error = function(e) {
+    ht <- Heatmap(sigprofile.mtx %>% scale(), 
+                  name = paste("Scaled signature", profile.flavor, sep = " "),
+                  column_names_gp = gpar(fontsize = ht_sig_names_size),
+                  left_annotation = row_ha, 
+                  #row_split = sigprofile.df$cohort,
+                  cluster_rows = F,
+                  top_annotation = col_ha,
+                  #column_split = (sigprofile.df %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1],
+                  cluster_columns = F)
+    png(snakemake@output[['patient_profiles_heatmap_clustered']], width = 15, height = 7, units = "in", res = 321)
+    draw(ht)
+    dev.off()
+  })
+})
+
 
 # signature correlation across samples - corrplot ------------------------------
-png(snakemake@output[['patient_profiles_corrplot']], width = 12, height = 12, units = "in", res = 321)
+png(snakemake@output[['patient_profiles_corrplot']], width = 15, height = 15, units = "in", res = 321)
 corrplot(corr = sigprofile.corr)
 dev.off()
 
@@ -60,7 +130,7 @@ ggplot(sigprofile.df.long, aes(x = sample, y = get(profile.flavor), fill = signa
   theme(axis.text.x = element_blank(),
         legend.position = "right") + 
   labs(y = profile.flavor)
-ggsave(snakemake@output[['patient_profiles_stacked_bar_plot']], device = "png", height = 15, width = 10, units = "in", dpi = 321)
+ggsave(snakemake@output[['patient_profiles_stacked_bar_plot']], device = "png", height = 15, width = 15, units = "in", dpi = 321)
 
 # plot circlized bars ----------------------------------------------------------
 sigprofile.plist <- lapply(unique(sigprofile.df.long$sample), function(s) {
@@ -155,19 +225,16 @@ cowplot::plot_grid(plotlist = sigprofile.plist, ncol = floor(sqrt(length(sigprof
 dev.off()
 
 
+# plot individual circlized bars -----------------------------------------------
+dir = snakemake@params[['patient_profiles_individual_circlized_bar_plot_dir']]
+if (!dir.exists(dir)) dir.create(dir)
 
-
-
-
-
-
-
-
-
-
-
-
-
+lapply(names(sigprofile.plist), function(sample) {
+  print(paste0("Printing ", condition, " ", compartment, " signature ", profile.flavor, " profile circlized bar plot for patient ", sample))
+  png(paste0(dir, sample, ".png"), width = 7, height = 7, units = "in", res = 321)
+  print(sigprofile.plist[[sample]])
+  dev.off()
+})
 
 
 

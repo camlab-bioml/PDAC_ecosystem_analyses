@@ -11,7 +11,7 @@ source("utils/myhelpers.R")
 
 scepath <- snakemake@input[['sce']]
 
-cohorts <- str_split(string = scepath, pattern  = "-sce-", simplify = T)[,2]  
+cohorts <- str_split(string = scepath, pattern  = "-sce-", simplify = T)[,2]
 cohorts <- str_split(string = cohorts, pattern = ".rds", simplify = T)[,1]
 
 print("cohorts available:")
@@ -54,7 +54,7 @@ scelist <- list(discovery = scelist_discovery,
                 validation = scelist_validation)
 
 # select dimred results to keep when cbind sces
-dimred_to_keep = c("UMAP_ON_HARMONY", "TSNE_ON_HARMONY", "INTEGRATED_DR", "REF.UMAP")
+dimred_to_keep = c("UMAP_On_Harmony", "TSNE_On_Harmony", "seuratPCA", "seuratUMAP", "REF.UMAP")
 
 # the grouping of cohorts
 lapply(seq_along(scelist), function(i) {
@@ -66,6 +66,11 @@ lapply(seq_along(scelist), function(i) {
   sample_cell_counts <- sample_cell_counts %>% 
     filter(ncells >= as.numeric(snakemake@params[['sample_cell_count_thres']]))
   
+  print(paste0("group: ", group))
+  print(paste0("samples available: ", paste(sample_cell_counts$sample, collapse = ", ")))
+  print("sample_cell_counts:")
+  print(sample_cell_counts)
+
   # handle the sces
   sces <- lapply(sces, function(sce) {
     samples_to_keep <- sample_cell_counts %>% filter(cohort == sce[["cohort"]][1])
@@ -88,7 +93,7 @@ lapply(seq_along(scelist), function(i) {
     sce
   })
   
-  # get common genes and cell metadata DFrame across multiple cohorts
+  # get common genes and cell/gene metadata DFrame across multiple cohorts
   if (length(sces) > 1) {
     geneslist <- lapply(sces, rownames)
     common_genes <- Reduce(intersect, geneslist)
@@ -102,6 +107,16 @@ lapply(seq_along(scelist), function(i) {
       }
       sce
     })
+
+    sces <- lapply(sces, function(sce) {
+      rowData(sce)[["seurat_variableFeatures_vst_varianceStandardized"]] <- NULL
+      rowData(sce)[["seurat_variableFeatures_vst_mean"]] <- NULL
+      rowData(sce)[["chr"]] <- NULL
+      rowData(sce)[["gene_start"]] <- NULL
+      rowData(sce)[["gene_end"]] <- NULL
+      rowData(sce)[["gene_strand"]] <- NULL
+      sce
+    })
   }
   
   # combine multiple cohorts
@@ -110,8 +125,25 @@ lapply(seq_along(scelist), function(i) {
     sce
   })
   sce <- Reduce(cbind, sces)
+  
+  print("gene names:")
+  print(head(rownames(sce)))
+
   rownames(sce) <- rowData(sce)[['Symbol']]
   
+  print("combined sce:")
+  print(dim(sce))
+  print("number of genes with NA names:")
+  print(table(is.na(rownames(sce))))
+  print(head(rowData(sce)))
+  print(head(colData(sce)))
+  print(head(rownames(sce)))
+  print(head(colnames(sce)))
+
+  # magic that makes do_dimred (singleCellTK::runSeurat* functions) work
+  sce <- SingleCellExperiment(assays = assays(sce), rowData = rowData(sce), colData = colData(sce), reducedDims = reducedDims(sce), altExps = altExps(sce))
+
+
   # redo PCA, Harmony, UMAP, and TSNE; correcting for cohort level batch effect
   if (length(sces) > 1 & ncol(sce) > 20) {sce <- do_dimred(sce, harmonize = T, batch_col = "cohort", n_cores = snakemake@threads)}
   

@@ -21,7 +21,7 @@ print(dimred)
 p1 <- DimPlot(seu, reduction = dimred, group.by = paste0("predicted.", snakemake@params[['annot_level']]), label = TRUE, repel = T, label.size = 6) + NoLegend()
 p2 <- DimPlot(seu, reduction = dimred, group.by = snakemake@params[['metadata_to_color']])
 
-png(snakemake@output[['umap_cell_type']], width = 1800, height = 800)
+png(snakemake@output[['umap_cell_type']], width = 18, height = 8, units = "in", res = 321)
 p1 + p2
 dev.off()
 
@@ -50,14 +50,14 @@ lapply(names(plist), function(ct) {
     dir.create(snakemake@params[['individual_celltype_prediction_score_UMAP_dir']], recursive = T)
   }
   png(paste0(snakemake@params[['individual_celltype_prediction_score_UMAP_dir']], 'UMAP-celltype-prediction-score-', ct,'.png'), 
-      width = 1200, height = 800)
+      width = 12, height = 8, units = "in", res = 321)
   print(plist[[ct]])
   dev.off()
 })
 
 # save combined cell type prediction sore plot
 p3 <- wrap_plots(plist, guides = "collect")
-png(snakemake@output[['umap_prediction_score']], width = 1800, height = 1500)
+png(snakemake@output[['umap_prediction_score']], width = 18, height = 15, units = "in", res = 321)
 p3
 dev.off()
 
@@ -84,7 +84,7 @@ hm <- Heatmap(mtx, name = "Predicted score",
               column_split = score_mtx[['cell_type']],
               use_raster = T)
 
-png(snakemake@output[['heatmap_prediction_score']], width = 1200, height = 500)
+png(snakemake@output[['heatmap_prediction_score']], width = 12, height = 5, units = "in", res = 321)
 draw(hm, merge_legend = T)
 dev.off()
 

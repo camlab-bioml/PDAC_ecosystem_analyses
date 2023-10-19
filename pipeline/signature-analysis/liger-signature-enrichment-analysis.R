@@ -20,6 +20,10 @@ if (condition == "validated") {
   w <- read_tsv(snakemake@input[['gene_loading_mtx_collapsed']])
   condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
   signature.id = min(signature.id, length(grep(condition, names(w), value = T)))
+} else if (condition == "collapsed-scored-validation") {
+  w <- read_tsv(snakemake@input[['gene_loading_mtx_collapsed_scored_validation']])
+  condition = paste(snakemake@wildcards[['subtype']], "RepVal", sep = " ")
+  signature.id = min(signature.id, length(grep(condition, names(w), value = T)))
 }
 
 signature <- paste(condition, signature.id, sep = " ")
@@ -50,7 +54,7 @@ ans.gse <- tryCatch({
         ont = "BP", 
         minGSSize = 10,
         maxGSSize = as.numeric(snakemake@params[['gsea_maxGSSize']]),
-        pvalueCutoff = 0.01,
+        pvalueCutoff = 0.05,
         pAdjustMethod = "BH",
         verbose = T,
         seed = F,
@@ -64,7 +68,7 @@ ans.gse <- tryCatch({
         ont = "BP", 
         minGSSize = 20,
         maxGSSize = as.numeric(snakemake@params[['gsea_maxGSSize']]),
-        pvalueCutoff = 0.01,
+        pvalueCutoff = 0.05,
         pAdjustMethod = "BH",
         verbose = T,
         seed = F,
@@ -82,7 +86,7 @@ ans.go <- enrichGO(gene = deGenes[[signature]],
                    minGSSize = 10,
                    maxGSSize = 500,
                    readable=TRUE,
-                   pvalueCutoff = 0.01,
+                   pvalueCutoff = 0.05,
                    pAdjustMethod = "BH")
 
 # convert gene ENSEMBL ids to ENTREZ ids (may be unnecessary)
@@ -99,7 +103,7 @@ ans.kegg <- enrichKEGG(gene = deGenes[[signature]],
                        organism = 'hsa',
                        keyType = "kegg",
                        universe = geneUniverse,
-                       pvalueCutoff = 0.01,
+                       pvalueCutoff = 0.05,
                        minGSSize = 10,
                        maxGSSize = 500,
                        pAdjustMethod = "BH")

@@ -14,6 +14,8 @@ sig.profiles <- read_tsv(snakemake@input[['sig_profiles']])
 condition <- snakemake@wildcards[['condition']]
 if (condition == "validated") condition = snakemake@wildcards[['subtype']]
 if (condition == "collapsed") condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
+if (condition == "collapsed-scored-validation") condition = paste(snakemake@wildcards[['subtype']], "RepVal", sep = " ")
+
 profile.flavour <- snakemake@wildcards[['profile']]
 
 # construct the profile heatmap

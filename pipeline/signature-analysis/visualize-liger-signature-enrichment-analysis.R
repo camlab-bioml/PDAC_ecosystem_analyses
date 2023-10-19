@@ -25,6 +25,10 @@ if (condition == "validated") {
   w <- read_tsv(snakemake@input[['gene_loading_mtx_collapsed']])
   condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
   signature = min(signature, length(grep(condition, names(w), value = T)))
+} else if (condition == "collapsed-scored-validation") {
+  w <- read_tsv(snakemake@input[['gene_loading_mtx_collapsed_scored_validation']])
+  condition = paste(snakemake@wildcards[['subtype']], "RepVal", sep = " ")
+  signature = min(signature, length(grep(condition, names(w), value = T)))
 }
 
 # plot GSEA result
@@ -44,11 +48,20 @@ ggsave(snakemake@output[['gsea_go_plot']], p, width = 9, height = 8, units = "in
 
 # plot over-representation results
 p1 <- barplot(ans.go, showCategory=10) + ggtitle("GO")
-ggsave(snakemake@output[['overrepresentation_go_plot']], p1, width = 7, height = 7, units = "in")
+ggsave(snakemake@output[['overrepresentation_go_plot']], p1, width = 7, height = 7, units = "in", dpi = 321)
 
-p2 <- dotplot(ans.kegg, showCategory=20) + ggtitle("KEGG")
-ggsave(snakemake@output[['overrepresentation_kegg_plot']], p2, width = 7, height = 8, units = "in")
-
+tryCatch({
+  p2 <- dotplot(ans.kegg, showCategory=20) + ggtitle("KEGG")
+  ggsave(snakemake@output[['overrepresentation_kegg_plot']], p2, width = 7, height = 8, units = "in", dpi = 321)
+}, error = function(e) {
+  png(snakemake@output[['overrepresentation_kegg_plot']], width = 7, height = 8, units = "in", res = 321)
+  par(mar=c(0,0,0,0))
+  plot(c(0, 1), c(0, 1), ann = F, bty = 'n', type = 'n', xaxt = 'n', yaxt = 'n')
+  text(x = 0.5, y = 0.5, 
+       paste("doptplot() encountered this error:\n", e), 
+       cex = 1, col = "black", family = "serif", font = 2, adj = 0.5)
+  dev.off()
+})
 
 
 

@@ -1,70 +1,3 @@
-rule liger_signature_validation:
-	input:
-		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
-	params:
-		corr_method = config['signatures']['corr_method'],
-		corr_thres = config['signatures']['corr_thres'],
-		dist_method = config['signatures']['dist_method'],
-		dist_thres = config['signatures']['dist_thres'],
-		minkowski_p = config['signatures']['minkowski_p']
-	output:
-		gene_loading_corr = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-corr.tsv',
-		gene_loading_dist = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-dist.tsv',
-		validated_sig_df = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-validated-signatures.tsv',
-	resources:
-		mem_mb = 1000
-	threads: 1
-	script:
-		'signature-analysis/liger-signature-validation.R'
-
-rule visualize_liger_signature_validation:
-	input:
-		gene_loading_corr = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-corr.tsv',
-		gene_loading_dist = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-dist.tsv',
-	params:
-		dist_method = config['signatures']['dist_method'],
-	output:
-		gene_loading_corr_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-corr.png',
-		gene_loading_dist_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-dist.png',
-	resources:
-		mem_mb = 1000
-	threads: 1
-	script:
-		'signature-analysis/visualize-liger-signature-validation.R'
-
-rule extract_validated_liger_signatures:
-	input:
-		sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-discovery.tsv',
-		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
-		validated_sig_df = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-validated-signatures.tsv',
-	params:
-		validation_metric = config['signatures']['validation_metric_to_use']
-	output:
-		validated_sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-validated.tsv',
-		validated_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
-	resources: 
-		mem_mb = 1000
-	threads: 1
-	script:
-		'signature-analysis/extract-validated-liger-signatures.R'
-
-rule liger_signature_collapse:
-	input:
-		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
-		sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-validated.tsv',
-		signature_collapse_guide = config['signatures']['signature_collapse_guide'],
-	params:
-		
-	output:
-		collapsed_sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-collapsed.tsv',
-		collapsed_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
-		sig_collapse_namemap = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-collapse-name-mapping.tsv',
-	resources:
-		mem_mb = 1000
-	threads: 1
-	script:
-		'signature-analysis/liger-signature-collapse.R'
-
 rule liger_signature_top_gene_loading_analysis_disval:
 	input:
 		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
@@ -72,6 +5,7 @@ rule liger_signature_top_gene_loading_analysis_disval:
 		num_top_genes = config['signatures']['num_top_genes'],
 	output:
 		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.tsv',
+		sig_top_gene_tsv = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene.tsv',
 	resources:
 		mem_mb = 1000
 	threads: 1
@@ -81,13 +15,19 @@ rule liger_signature_top_gene_loading_analysis_disval:
 rule visualize_liger_signature_top_gene_loading_analysis_disval:
 	input:
 		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.tsv',
+		sig_top_gene_tsv = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene.tsv',
+		sce_subtype_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-discovery.rds',
+		sce_subtype_val = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-validation.rds',
+		sig_loading_mtx_dis = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-discovery.tsv',
+		sig_loading_mtx_val = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-validation.tsv',
 	params:
-		
+		num_top_genes = config['signatures']['num_top_genes'],
+		top_gene_exprs_plot_dir = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/top-gene-expression-plots/disval/',
 	output:
 		sig_top_gene_loading_heatmap = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading.png',
 	resources:
-		mem_mb = 1000
-	threads: 1
+		mem_mb = 30000
+	threads: 4
 	script:
 		'signature-analysis/visualize-liger-signature-top-gene-loading-analysis-disval.R'
 
@@ -98,6 +38,7 @@ rule liger_signature_top_gene_loading_analysis:
 		num_top_genes = config['signatures']['num_top_genes'],
 	output:
 		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.tsv',
+		sig_top_gene_tsv = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-{condition}.tsv',
 	resources:
 		mem_mb = 1000
 	threads: 1
@@ -106,14 +47,19 @@ rule liger_signature_top_gene_loading_analysis:
 
 rule visualize_liger_signature_top_gene_loading_analysis:
 	input:
+		cohort_pal = figureoutput + 'cohort-palette.rds',
 		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.tsv',
+		sig_top_gene_tsv = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-{condition}.tsv',
+		sce_subtype_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-discovery.rds',
+		sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-{condition}.tsv',
 	params:
-		
+		num_top_genes = config['signatures']['num_top_genes'],
+		top_gene_exprs_plot_dir = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/top-gene-expression-plots/{condition}/',
 	output:
 		sig_top_gene_loading_heatmap = figureoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.png',
 	resources:
-		mem_mb = 1000
-	threads: 1
+		mem_mb = 30000
+	threads: 4
 	script:
 		'signature-analysis/visualize-liger-signature-top-gene-loading-analysis.R'
 
@@ -177,7 +123,7 @@ rule visualize_liger_signature_known_markers_analysis:
 
 rule liger_signature_enrichment_analysis_extract_geneuniverse:
 	input:
-		scelist_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNAseq-{subtype}-scelist-discovery.rds',
+		scelist_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-scelist-discovery.rds',
 	params:
 		
 	output:
@@ -193,6 +139,7 @@ rule liger_signature_enrichment_analysis:
 		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading.tsv',
 		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
 		gene_loading_mtx_collapsed = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
+		gene_loading_mtx_collapsed_scored_validation = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed-scored-validation.tsv',
 		geneuniverse = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/{subtype}-signature-geneuniverse-{condition}.rds',
 	params:
 		signature = '{k}',
@@ -214,6 +161,7 @@ rule visualize_liger_signature_enrichment_analysis:
 		gsea_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-GO.rds',
 		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
 		gene_loading_mtx_collapsed = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
+		gene_loading_mtx_collapsed_scored_validation = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed-scored-validation.tsv',
 	params:
 		signature = '{k}',
 	output:
@@ -336,3 +284,42 @@ rule visualize_liger_signature_loading_profiles:
 	script:
 		'signature-analysis/visualize-liger-signature-loading-profiles.R'
 
+rule figure_2_preparation:
+	input:
+		sig_loading_mtx = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-' + wildcards.condition + '.tsv', subtype = list(ct_for_patient_profile[wildcards.compartment])),
+	params:
+		celltypes = lambda wildcards: list(ct_for_patient_profile[wildcards.compartment]),
+	output:
+		sig_loading_mtx_metadata = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-metadata-{condition}.rds',
+		sig_loading_mtx_scaled = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-scaled-{condition}.rds',
+		sig_loading_var_mtx = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-variance-matrix-{condition}.rds',
+		sig_loading_var = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-variance-{condition}.tsv',
+		sig_loading_ncell = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-ncell-{condition}.rds',
+		sig_loading_median_mtx = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-median-matrix-{condition}.tsv',
+		sig_loading_mean_mtx = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-mean-matrix-{condition}.tsv',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/figure-2-preparation.R'
+
+rule draw_figure_2:
+	input:
+		cohort_pal = figureoutput + 'cohort-palette.rds',
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		ambient_sigs = config['figure2']['ambient_sigs'],
+		sig_loading_var_dis = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed/signature-loading-variance-collapsed.tsv',
+		sig_loading_var_val = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed-scored-validation/signature-loading-variance-collapsed-scored-validation.tsv',
+		sig_loading_median_mtx_dis = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed/signature-loading-median-matrix-collapsed.tsv',
+		sig_loading_median_mtx_val = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed-scored-validation/signature-loading-median-matrix-collapsed-scored-validation.tsv',
+	params:
+		figure2_b_width = config['figure2']['figure2_b_width'],
+		figure2_b_height = config['figure2']['figure2_b_height'],
+	output:
+		figure2_b = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-b-{compartment}.png',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/draw-figure-2.R'

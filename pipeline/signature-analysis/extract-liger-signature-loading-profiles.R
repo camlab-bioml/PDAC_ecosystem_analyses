@@ -13,6 +13,7 @@ sigquantilepass.df <- read_tsv(snakemake@input[['sig_activation_freq']])
 condition <- snakemake@wildcards[['condition']]
 if (condition == "validated") condition = snakemake@wildcards[['subtype']]
 if (condition == "collapsed") condition = paste(snakemake@wildcards[['subtype']], "Rep", sep = " ")
+if (condition == "collapsed-scored-validation") condition = paste(snakemake@wildcards[['subtype']], "RepVal", sep = " ")
 
 sigtopfreq.profiles <- sigtopfreq.df %>% 
   select(cohort, sample, contains(condition))
