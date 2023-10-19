@@ -1,0 +1,314 @@
+---
+title: "Compare SingleR and Azimuth annotation"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(scuttle)
+  library(SingleR)
+  library(singleCellTK)
+  library(caret)
+  library(clue)
+  library(BiocParallel)
+  library(sjstats)
+  library(ggpubr)
+  library(ggsci)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(patchwork)
+  library(ggalluvial)
+})
+```
+
+```{r}
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto", "Werba")
+```
+
+# load information
+```{r}
+annotation.azimuth <- readRDS("umap-coordinates.rds")
+annotation.singler <- readRDS("umap-coordinates-new.rds")
+```
+
+# tidyup some data
+```{r}
+annotation.singler <- lapply(annotation.singler, function(df) {
+  df %>%
+    # add column n with counts for each celltype
+    add_count(Cell_type) %>% 
+    # combine the cell type and count n into one column
+    mutate(Cell_type = paste0(Cell_type, ' (', n, ')')) %>%
+    # add column n with counts for each cohort
+    add_count(Cohort) %>% 
+    # combine the cohort and count n into one column
+    mutate(Cohort = paste0(Cohort, ' (', nn, ')'))
+})
+```
+
+# join two data frames
+```{r}
+annotation <- lapply(names(annotation.azimuth), function(group) {
+  df.azimuth <- annotation.azimuth[[group]]
+  df.singler <- annotation.singler[[group]]
+  
+  full_join(df.azimuth, df.singler, by = "Cell_ID", suffix = c(".Azimuth", ".SingleR"))
+})
+names(annotation) <- names(annotation.azimuth)
+```
+
+# draw cell type label match count heatmaps
+```{r}
+ct.cm.list <- lapply(names(annotation), function(group) {
+  df <- annotation[[group]] %>% select(contains("Cell_type"))
+  counts <- table(df$Cell_type.Azimuth, df$Cell_type.SingleR) %>% as.data.frame.matrix() %>% as.matrix()
+  counts <- counts[,solve_LSAP(counts, maximum = T)]
+  counts
+})
+names(ct.cm.list) <- names(annotation)
+
+ht.list <- lapply(names(ct.cm.list), function(group) {
+  counts <- ct.cm.list[[group]]
+  Heatmap(counts, 
+          cluster_rows = F, cluster_columns = F,
+          row_names_gp = gpar(fontsize = 10),
+          column_names_rot = 90, column_names_gp = gpar(fontsize = 10),
+          row_title = paste0("Azimuth + SingleR labels"), row_title_gp = gpar(fontface = "bold"),
+          column_title = paste0("SingleR labels"), column_title_gp = gpar(fontface = "bold"),
+          col = circlize::colorRamp2(seq(from = min(counts), to = max(counts)*0.05, length.out = 10), viridisLite::viridis(10)),
+          name = paste0("Cell count\nin ", group),
+          cell_fun = function(j, i, x, y, width, height, fill) {
+            if(counts[i, j] > 0)
+              grid.text(sprintf("%.0f", counts[i, j]), x, y, gp = gpar(fontsize = 10))
+          })
+})
+names(ht.list) <- names(ct.cm.list)
+```
+
+```{r}
+png(filename = "test-heatmap-discovery.png", width = 10, height = 9, units = "in", res = 321)
+ht.list$Discovery
+dev.off()
+png(filename = "test-heatmap-validation.png", width = 10, height = 9, units = "in", res = 321)
+ht.list$Validation
+dev.off()
+```
+
+```{r}
+annotation.combined <- rbind(annotation$Discovery, annotation$Validation)
+
+ht.list <- lapply(cohorts, function(cohort) {
+  df <- annotation.combined %>% filter(grepl(cohort, Cohort.SingleR)) %>% select(contains("Cell_type"))
+  counts <- table(df$Cell_type.Azimuth, df$Cell_type.SingleR) %>% as.data.frame.matrix() %>% as.matrix()
+  counts <- counts[,solve_LSAP(counts, maximum = T)]
+  
+  Heatmap(counts, 
+          cluster_rows = F, cluster_columns = F,
+          row_names_gp = gpar(fontsize = 10),
+          column_names_rot = 90, column_names_gp = gpar(fontsize = 10),
+          row_title = paste0("Azimuth + SingleR labels"), row_title_gp = gpar(fontface = "bold"),
+          column_title = paste0("SingleR labels"), column_title_gp = gpar(fontface = "bold"),
+          col = circlize::colorRamp2(seq(from = min(counts), to = max(counts)*0.05, length.out = 10), viridisLite::viridis(10)),
+          name = paste0("Cell count\nin ", cohort),
+          cell_fun = function(j, i, x, y, width, height, fill) {
+            if(counts[i, j] > 0)
+              grid.text(sprintf("%.0f", counts[i, j]), x, y, gp = gpar(fontsize = 10))
+          })
+})
+names(ht.list) <- cohorts
+```
+
+```{r}
+pdf(file = "test-heatmap.pdf", width = 10, height = 9, bg = "white")
+lapply(ht.list, function(ht) ht)
+dev.off()
+```
+
+# draw seurat cluster match count heatmaps
+```{r}
+seuclust.cm.list <- lapply(names(annotation), function(group) {
+  df <- annotation[[group]] %>% select(contains("Seurat_cluster"))
+  counts <- table(df$Seurat_cluster.Azimuth, df$Seurat_cluster.SingleR) %>% as.data.frame.matrix() %>% as.matrix()
+  counts <- counts[,solve_LSAP(counts, maximum = T)]
+  counts
+})
+names(seuclust.cm.list) <- names(annotation)
+
+ht.list <- lapply(names(seuclust.cm.list), function(group) {
+  counts <- seuclust.cm.list[[group]]
+  Heatmap(counts, 
+          cluster_rows = F, cluster_columns = F,
+          row_names_gp = gpar(fontsize = 12),
+          column_names_rot = 90, column_names_gp = gpar(fontsize = 12),
+          row_title = paste0("Azimuth + SingleR Seurat cluster"), row_title_gp = gpar(fontface = "bold"),
+          column_title = paste0("SingleR Seurat cluster"), column_title_gp = gpar(fontface = "bold"),
+          col = circlize::colorRamp2(seq(from = min(counts), to = max(counts)*0.05, length.out = 10), viridisLite::viridis(10)),
+          name = paste0("Cell count\nin ", group),
+          cell_fun = function(j, i, x, y, width, height, fill) {
+            if(counts[i, j] > 0)
+              grid.text(sprintf("%.0f", counts[i, j]), x, y, gp = gpar(fontsize = 10))
+          })
+})
+names(ht.list) <- names(seuclust.cm.list)
+```
+
+```{r}
+png(filename = "test-heatmap-discovery.png", width = 16, height = 10, units = "in", res = 321)
+ht.list$Discovery
+dev.off()
+png(filename = "test-heatmap-validation.png", width = 16, height = 10, units = "in", res = 321)
+ht.list$Validation
+dev.off()
+```
+
+# check disagreemente between the two labeling approaches
+```{r}
+ct.sus.discovery <- annotation$Discovery %>%
+  filter(grepl("neural cell", Cell_type.SingleR) & grepl("CD4 T", Cell_type.Azimuth))
+table(ct.sus.discovery$Cohort.Azimuth, ct.sus.discovery$Cohort.SingleR)
+
+ct.sus.discovery <- annotation$Discovery %>%
+  filter(grepl("neural cell", Cell_type.SingleR) & grepl("DC", Cell_type.Azimuth))
+table(ct.sus.discovery$Cohort.Azimuth, ct.sus.discovery$Cohort.SingleR)
+
+ct.sus.discovery <- annotation$Discovery %>%
+  filter(grepl("plasma cell", Cell_type.SingleR) & grepl("DC", Cell_type.Azimuth))
+table(ct.sus.discovery$Cohort.Azimuth, ct.sus.discovery$Cohort.SingleR)
+
+ct.sus.discovery <- annotation$Discovery %>%
+  filter(grepl("plasma cell", Cell_type.SingleR) & grepl("Endocrine", Cell_type.Azimuth))
+table(ct.sus.discovery$Cohort.Azimuth, ct.sus.discovery$Cohort.SingleR)
+```
+
+## load sces
+```{r}
+sce.steele <- readRDS("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-Steele.rds")
+```
+
+```{r}
+singler.label = "plasma cell"
+
+ct.sus.discovery <- annotation.combined %>%
+  filter(grepl(singler.label, Cell_type.SingleR) & grepl("Steele", Cohort.SingleR))
+
+sce.steele.sus <- sce.steele[,ct.sus.discovery %>% pull(Cell_ID)]
+sce.steele.sus$azimuth_label <- (plyr::mapvalues(colnames(sce.steele.sus), 
+                                           from = annotation.combined$Cell_ID, to = annotation.combined$Cell_type.Azimuth, 
+                                           warn_missing = F) %>%
+  str_split(string = ., pattern = " \\(", simplify = T))[,1]
+```
+
+```{r}
+grep("PTPRC", rownames(sce.steele.sus), value = T)
+```
+
+```{r}
+the.gene = c("PTPRC")
+
+plotSCEViolin(
+  inSCE = sce.steele.sus, slotName = "assays",
+  itemName = "logcounts", feature = the.gene, groupBy = "azimuth_label",
+  xlab = "Azimuth + SingleR labels",
+  ylab = paste0(the.gene, " logcounts"),
+  title = paste0("SingleR label: ", singler.label)
+)
+```
+
+```{r}
+grep("ITGAM", rownames(sce.steele.sus), value = T)
+```
+
+```{r}
+the.genes = c("CD4", "PTPRC", "ITGAM")
+
+plotExpression(
+  sce.steele.sus,
+  features = the.genes,
+  x = "azimuth_label",
+  exprs_values = "logcounts",
+  colour_by = "azimuth_label",
+  xlab = "Azimuth + SingleR labels",
+  one_facet = TRUE,
+  ncol = 1,
+  scales = "free"
+) + 
+  labs(title = paste0("SingleR label: ", singler.label))
+ggsave("test-violin.png", device = "png", dpi = "retina", bg = "white")
+```
+
+# check Seurat clusters
+```{r}
+table(annotation.combined$Seurat_cluster.SingleR)
+table(annotation.combined$Cell_type.SingleR)
+table(annotation.combined$Cohort.SingleR)
+```
+
+```{r}
+annotation.combined.for.stacked.bar <- annotation.combined %>%
+  mutate(Cell_type.SingleR = str_split(Cell_type.SingleR, " \\(", simplify = T)[,1]) %>%
+  mutate(Cell_type.SingleR.broad = plyr::mapvalues(Cell_type.SingleR,
+                                             from = c("CD4-positive, alpha-beta T cell", "CD8-positive, alpha-beta T cell",
+                                                      "pancreatic acinar cell", "pancreatic ductal cell",
+                                                      "type B pancreatic cell", "pancreatic epsilon cell", 
+                                                      "B cell", "plasma cell",
+                                                      "blood vessel endothelial cell",
+                                                      "myeloid dendritic cell", 
+                                                      "pancreatic stellate cell"),
+                                             to = c("T cell", "T cell",
+                                                    "Epithelial cell", "Epithelial cell",
+                                                    "Endocrine cell", "Endocrine cell", 
+                                                    "B/plasma cell", "B/plasma cell", 
+                                                    "Endothelial cell",
+                                                    "mDC", 
+                                                    "Stellate cell")))
+
+ggplot(annotation.combined.for.stacked.bar, aes(x = Seurat_cluster.SingleR)) +
+  geom_bar(aes(fill = Cell_type.SingleR.broad)) +
+  facet_wrap(~ Cohort.SingleR, scales = "free") +
+  theme_pubr()
+ggsave("test-stackedbar.png", device = "png", width = 20, height = 10, units = "in", dpi = "retina")
+```
+
+```{r}
+cohort.pattern = "Peng"
+cluster.pattern = "^3$|^4$|^9$|^10$"
+
+ggplot(annotation.combined.for.stacked.bar %>% 
+         filter(grepl(cohort.pattern, Cohort.SingleR)) %>% 
+         filter(grepl(cluster.pattern, Seurat_cluster.SingleR)), 
+       aes(x = UMAP_1.SingleR, y = UMAP_2.SingleR, color = Seurat_cluster.SingleR)) +
+  geom_point(alpha = 0.3, size = 0.1, shape = 1) + 
+  theme_pubr() + 
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 1, shape = 16)))
+
+ggplot(annotation.combined.for.stacked.bar %>% 
+         filter(grepl(cohort.pattern, Cohort.SingleR)) %>% 
+         filter(grepl(cluster.pattern, Seurat_cluster.SingleR)), 
+       aes(x = UMAP_1.SingleR, y = UMAP_2.SingleR, color = Cell_type.SingleR)) +
+  geom_point(alpha = 0.3, size = 0.1, shape = 1) + 
+  theme_pubr() + 
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 1, shape = 16)))
+
+ggplot(annotation.combined.for.stacked.bar %>% 
+         filter(grepl(cohort.pattern, Cohort.SingleR)) %>% 
+         filter(grepl(cluster.pattern, Seurat_cluster.SingleR)), 
+       aes(x = UMAP_1.SingleR, y = UMAP_2.SingleR, color = Cell_type.SingleR.broad)) +
+  geom_point(alpha = 0.3, size = 0.1, shape = 1) + 
+  theme_pubr() + 
+  guides(color = guide_legend(override.aes = list(size = 5, alpha = 1, shape = 16)))
+```
+
+
+
+
+
+
+

@@ -1,0 +1,100 @@
+---
+title: "Process Schalck 2022 T cell markers"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(readxl)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(patchwork)
+})
+```
+
+```{r}
+n_top_genes = 50
+```
+
+```{r}
+df.schalck.supp.1 <- read_excel("../../../../Downloads/cd-21-1248_table_s1_suppst1.xlsx")
+df.schalck.supp.4 <- read_excel("../../../../Downloads/cd-21-1248_table_s4_suppst4.xlsx")
+df.schalck.supp.5 <- read_excel("../../../../Downloads/cd-21-1248_table_s5_suppst5.xls")
+```
+
+```{r}
+df.schalck.supp.1 <- df.schalck.supp.1 |>
+  filter(p_val_adj < 0.05)
+df.schalck.supp.4 <- df.schalck.supp.4 |>
+  filter(p_val_adj < 0.05)
+df.schalck.supp.5 <- df.schalck.supp.5 |>
+  filter(p_val_adj < 0.05)
+```
+
+```{r}
+unique(df.schalck.supp.1$cluster)
+unique(df.schalck.supp.4$cluster)
+unique(df.schalck.supp.5$cluster)
+```
+
+```{r}
+df.list <- list(PBMC_clusters = df.schalck.supp.1,
+                TIL_DEG_fresh = df.schalck.supp.4,
+                grown_clusters = df.schalck.supp.5)
+```
+
+```{r}
+markers.list <- lapply(df.list, function(df) {
+  df %>%
+    group_by(cluster) %>%
+    slice_max(avg_logFC, n = n_top_genes) %>%
+    mutate(row = row_number()) %>%
+    ungroup(cluster) %>%
+    select(row, cluster, gene) %>%
+    pivot_wider(names_from = cluster, values_from = gene, values_fill = NA) %>%
+    select(-row)
+})
+```
+
+```{r}
+View(markers.list$PBMC_clusters)
+View(markers.list$TIL_DEG_fresh)
+View(markers.list$grown_clusters)
+```
+
+```{r}
+lapply(names(markers.list), function(markers.df.name) {
+  markers.df <- markers.list[[markers.df.name]]
+  write.table(markers.df %>% select(contains("CD4") | contains("gdT")), 
+              file = paste0("../resources/markers/known-signature-markers/CD4/Schalck_", markers.df.name, "_marker_list.csv"), 
+              sep = ",", row.names = F, col.names = T, na = "")
+  write.table(markers.df %>% select(contains("CD8") | contains("gdT")), 
+              file = paste0("../resources/markers/known-signature-markers/CD8/Schalck_", markers.df.name, "_marker_list.csv"), 
+              sep = ",", row.names = F, col.names = T, na = "")
+})
+list.files(paste(getwd(), "../resources/markers/known-signature-markers/CD4/", sep = "/"))
+list.files(paste(getwd(), "../resources/markers/known-signature-markers/CD8/", sep = "/"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,138 @@
+---
+title: "SingleR all cell annotation"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(scuttle)
+  library(SingleR)
+  library(singleCellTK)
+  library(BiocParallel)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(patchwork)
+  library(ggalluvial)
+})
+```
+
+```{r}
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto", "Hwang", "Werba")
+```
+
+```{r}
+sceQuery <- readRDS("../output/v2/data/process-sce/scRNASeq-filtered-sce-Lee.rds")
+sceRef <- readRDS("../data/references/pk_all.rds")
+```
+
+```{r}
+table(sceRef$Patient) %>% sort(decreasing = T)
+table(sceRef$Type) %>% sort(decreasing = T)
+table(sceRef$Cell_type) %>% sort(decreasing = T)
+table(sceRef$celltype0) %>% sort(decreasing = T)
+table(sceRef$celltype1) %>% sort(decreasing = T)
+table(sceRef$celltype2) %>% sort(decreasing = T)
+table(sceRef$celltype3) %>% sort(decreasing = T)
+table(sceRef$Patient2) %>% sort(decreasing = T)
+table(sceRef$Project) %>% sort(decreasing = T)
+table(sceRef$predicted.id) %>% sort(decreasing = T)
+```
+
+```{r}
+coldata <- sceRef@meta.data %>% as.data.frame()
+
+coldata.summary <- coldata |> 
+  group_by(Project, Patient, Type, celltype0, celltype1, celltype2, celltype3, Cell_type) |>
+  summarise(Freq = n(), mean_nFeatureRNA = mean(nFeature_RNA), mean_nCountRNA = mean(nCount_RNA)) %>%
+  ungroup()
+```
+
+```{r}
+ggplot(data = coldata.summary %>% filter(Project == "CA001063"),
+       aes(axis1 = Project, axis2 = Patient, axis3 = Type, axis4 = Cell_type, axis5 = celltype0, axis6 = celltype1, , axis7 = celltype2, axis8 = celltype3,
+           y = Freq)) +
+  scale_x_discrete(limits = c("Cohort", "PatientID", "Sample type", "Cell type", "celltype0", "celltype1", "celltype2", "celltype3")) +
+  xlab("") +
+  geom_stratum() +
+  geom_alluvium(aes(fill = celltype2, alpha = mean_nFeatureRNA)) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_pubr() +
+  ggtitle("")
+ggsave("test.png", device = "png", width = 25, height = 18, units = "in", dpi = 321, bg = "white")
+```
+
+```{r}
+ref_label_field = "celltype2"
+```
+
+```{r}
+sceRef <- Seurat::as.SingleCellExperiment(sceRef)
+sceRef.to.use <- sceRef[,sceRef$Project == "CA001063"]
+```
+
+```{r}
+head(rownames(sceQuery))
+head(rownames(sceRef.to.use))
+
+rowData(sceRef.to.use)[["symbol"]] <- rownames(sceRef.to.use)
+rowData(sceRef.to.use)[['ensembl_id']] <- plyr::mapvalues(rowData(sceRef.to.use)[["symbol"]], 
+                                                          from = annotables::grch38$symbol, 
+                                                          to = annotables::grch38$ensgene,
+                                                          warn_missing = F)
+
+rownames(sceRef.to.use) <- paste(rowData(sceRef.to.use)[["ensembl_id"]], rowData(sceRef.to.use)[["symbol"]], sep = "_")
+```
+
+```{r}
+common_genes = intersect(rownames(sceQuery), rownames(sceRef.to.use))
+print(grep("^RP[LS]|^MT-", common_genes, value = T))
+```
+
+```{r}
+# remove genes matching a pattern from a list of genes
+filter_genes <- function(glist,
+                         rm.pattern = NULL,
+                         return.gnames = T) {
+  if (return.gnames) {
+    glist[!grepl(rm.pattern, glist)]
+  } else {
+    !grepl(rm.pattern, glist)
+  }
+}
+
+pred <- SingleR(test = sceQuery, 
+                ref = sceRef.to.use, 
+                labels = colData(sceRef.to.use)[[ref_label_field]], 
+                restrict = filter_genes(common_genes, "^RP[LS]|^MT-", return.gnames = T),
+                genes = "de",
+                sd.thresh = 1,
+                de.method = "classic",
+                de.n = NULL, 
+                de.args = list(), 
+                aggr.ref = T,
+                aggr.args = list(power = 0.5),
+                recompute = T,
+                quantile = 0.8,
+                fine.tune = T,
+                tune.thresh = 0.05,
+                prune = T,
+                assay.type.test = "logcounts",
+                assay.type.ref = "logcounts",
+                BPPARAM = BiocParallel::MulticoreParam(12))
+```
+
+```{r}
+pred.Lee <- pred
+```
+
+

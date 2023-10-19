@@ -23,7 +23,7 @@ suppressPackageStartupMessages({
 ```
 
 ```{r}
-cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto")
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto", "Hwang")
 ```
 
 # load sces

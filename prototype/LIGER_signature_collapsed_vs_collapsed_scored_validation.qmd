@@ -1,0 +1,159 @@
+---
+title: "Construct patient signature profiles"
+format: html
+editor: visual
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(corrplot)
+  library(circlize)
+  library(dendextend)
+})
+```
+
+```{r}
+profile.flavor = "loading-mean"
+condition = "collapsed"
+compartment = "full"
+```
+
+# compare signature correlations between collapsed and rescored validation signatures
+```{r}
+sigprofile.corr.colappsed <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/collapsed/loading-mean/patient-full-signature-profiles-correlation-loading-mean-collapsed.tsv")
+sigprofile.corr.rescored.val <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/collapsed-scored-validation/loading-mean/patient-full-signature-profiles-correlation-loading-mean-collapsed-scored-validation.tsv")
+
+sigs <- names(sigprofile.corr.colappsed)
+```
+
+## compute correlation using selected samples/cohorts
+```{r}
+sigprofile.rescored.val <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/collapsed-scored-validation/loading-mean/patient-full-signature-profiles-loading-mean-collapsed-scored-validation.tsv")
+
+sigprofile.corr.rescored.val <- sigprofile.rescored.val %>%
+  filter(cohort == "Werba") %>%
+  select(-cohort, -sample) %>%
+  as.matrix() %>%
+  cor(use = "pairwise.complete.obs") %>%
+  as.data.frame()
+```
+
+## tidy up data
+```{r}
+# collapsed
+upper.tri.ind <- which(upper.tri(sigprofile.corr.colappsed %>% as.matrix(), diag = F), arr.ind = T)
+unique.sigprofile.corr.colappsed <- cbind(upper.tri.ind, (sigprofile.corr.colappsed %>% as.matrix())[upper.tri.ind])
+
+colnames(unique.sigprofile.corr.colappsed) <- c("sig1", "sig2", "corr")
+unique.sigprofile.corr.colappsed <- unique.sigprofile.corr.colappsed %>% as.data.frame()
+unique.sigprofile.corr.colappsed$sig1 <- sapply(unique.sigprofile.corr.colappsed$sig1, function(ind) names(sigprofile.corr.colappsed)[ind])
+unique.sigprofile.corr.colappsed$sig2 <- sapply(unique.sigprofile.corr.colappsed$sig2, function(ind) names(sigprofile.corr.colappsed)[ind])
+unique.sigprofile.corr.colappsed$condition <- "collapsed"
+
+unique.sigprofile.corr.colappsed$sig1 <- str_replace(unique.sigprofile.corr.colappsed$sig1, "Rep ", "")
+unique.sigprofile.corr.colappsed$sig2 <- str_replace(unique.sigprofile.corr.colappsed$sig2, "Rep ", "")
+
+# rescored validation
+upper.tri.ind <- which(upper.tri(sigprofile.corr.rescored.val %>% as.matrix(), diag = F), arr.ind = T)
+unique.sigprofile.corr.rescored.val <- cbind(upper.tri.ind, (sigprofile.corr.rescored.val %>% as.matrix())[upper.tri.ind])
+
+colnames(unique.sigprofile.corr.rescored.val) <- c("sig1", "sig2", "corr")
+unique.sigprofile.corr.rescored.val <- unique.sigprofile.corr.rescored.val %>% as.data.frame()
+unique.sigprofile.corr.rescored.val$sig1 <- sapply(unique.sigprofile.corr.rescored.val$sig1, function(ind) names(sigprofile.corr.rescored.val)[ind])
+unique.sigprofile.corr.rescored.val$sig2 <- sapply(unique.sigprofile.corr.rescored.val$sig2, function(ind) names(sigprofile.corr.rescored.val)[ind])
+unique.sigprofile.corr.rescored.val$condition <- "rescored validation"
+
+unique.sigprofile.corr.rescored.val$sig1 <- str_replace(unique.sigprofile.corr.rescored.val$sig1, "RepVal ", "")
+unique.sigprofile.corr.rescored.val$sig2 <- str_replace(unique.sigprofile.corr.rescored.val$sig2, "RepVal ", "")
+
+unique.sigprofile.corr <- data.frame(sig1 = unique.sigprofile.corr.colappsed$sig1,
+                                     sig2 = unique.sigprofile.corr.colappsed$sig2,
+                                     corr.collapsed = unique.sigprofile.corr.colappsed$corr,
+                                     corr.rescored.val = unique.sigprofile.corr.rescored.val$corr)
+unique.sigprofile.corr$celltype.pair <- paste(str_split(unique.sigprofile.corr$sig1, " ", simplify = T)[,1], 
+                                              str_split(unique.sigprofile.corr$sig2, " ", simplify = T)[,1],
+                                              sep = "-")
+
+unique.sigprofile.corr <- unique.sigprofile.corr %>%
+  mutate(corr.sign.collapsed = sign(corr.collapsed), corr.sign.rescored.val = sign(corr.rescored.val)) %>%
+  mutate(corr.sign.equal = (corr.sign.collapsed == corr.sign.rescored.val)) %>%
+  mutate(intracelltype = str_split(celltype.pair, "-", simplify = T)[,1] == str_split(celltype.pair, "-", simplify = T)[,2])
+
+unique.sigprofile.corr.sign.count <- unique.sigprofile.corr %>%
+  dplyr::count(celltype.pair, corr.sign.equal) %>%
+  add_count(celltype.pair, wt = n, name = "total") %>%
+  mutate(freq = n / total) %>%
+  mutate(intracelltype = str_split(celltype.pair, "-", simplify = T)[,1] == str_split(celltype.pair, "-", simplify = T)[,2])
+
+unique.sigprofile.corr.summary <- unique.sigprofile.corr %>%
+  group_by(celltype.pair) %>%
+  summarise(mean.corr.collapsed = mean(corr.collapsed), mean.corr.rescored.val = mean(corr.rescored.val)) %>%
+  ungroup() %>%
+  mutate(mean.corr.sign.collapsed = sign(mean.corr.collapsed), mean.corr.sign.rescored.val = sign(mean.corr.rescored.val)) %>%
+  mutate(mean.corr.sign.equal = (mean.corr.sign.collapsed == mean.corr.sign.rescored.val)) %>%
+  mutate(intracelltype = str_split(celltype.pair, "-", simplify = T)[,1] == str_split(celltype.pair, "-", simplify = T)[,2])
+```
+
+## draw plots
+```{r}
+ggplot(unique.sigprofile.corr %>% dplyr::filter(!intracelltype), aes(x = corr.collapsed, y = corr.rescored.val)) +
+  geom_point(aes(color = celltype.pair)) +
+  ggpmisc::stat_poly_line(method = "lm") +
+  ggpmisc::stat_poly_eq(eq.with.lhs = "italic(hat(y))~`=`~",
+               aes(label = paste(after_stat(eq.label),
+                                 after_stat(rr.label), sep = "*\", \"*"))) +
+  geom_abline(color = "red", linetype = "dashed", alpha = 1) +
+  geom_hline(yintercept = 0, color = "grey", linetype = "dashed", alpha = 1) +
+  geom_vline(xintercept = 0, color = "grey", linetype = "dashed", alpha = 1) +
+  labs(title = "Each dot is correlation of a signature pair (e.g. B 1-Mono 1, Mono 3-ductal 8, CD4 2-stellate 5)") +
+  theme_pubr()
+ggsave("test4.png", device = "png", width = 10, height = 10, units = "in", dpi = "retina")
+
+ggplot(unique.sigprofile.corr.summary %>% dplyr::filter(!intracelltype), aes(x = mean.corr.collapsed, y = mean.corr.rescored.val, label = celltype.pair)) +
+  geom_point() +
+  ggpmisc::stat_poly_line(method = "lm") +
+  ggpmisc::stat_poly_eq(eq.with.lhs = "italic(hat(y))~`=`~",
+               aes(label = paste(after_stat(eq.label),
+                                 after_stat(rr.label), sep = "*\", \"*"))) +
+  geom_abline(color = "red", linetype = "dashed", alpha = 1) +
+  geom_hline(yintercept = 0, color = "grey", linetype = "dashed", alpha = 1) +
+  geom_vline(xintercept = 0, color = "grey", linetype = "dashed", alpha = 1) +
+  ggrepel::geom_label_repel() +
+  labs(title = "Each dot is mean correlation of a cell type pair (e.g. B-Mono, Mono-ductal, CD4-stellate)") +
+  theme_pubr()
+ggsave("test5.png", device = "png", width = 10, height = 10, units = "in", dpi = "retina")
+
+ggplot(unique.sigprofile.corr.sign.count, aes(x = reorder(celltype.pair, -n), y = n)) +
+  geom_bar(aes(fill = corr.sign.equal), stat = "identity", position = "dodge") +
+  labs(title = "Whether signs of correlation between pairs of sigs are the same in collapsed and rescored validation") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave("test6.png", device = "png", width = 10, height = 8, units = "in", dpi = "retina")
+
+ggplot(unique.sigprofile.corr.sign.count %>% dplyr::filter(corr.sign.equal == TRUE), aes(x = reorder(celltype.pair, -freq), y = freq)) +
+  geom_bar(aes(fill = intracelltype), stat = "identity", position = "dodge") +
+  labs(title = "Freq. that pairs of sigs have the same sign for corr. between collapsed and rescored validation") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave("test7.png", device = "png", width = 10, height = 8, units = "in", dpi = "retina")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -26,8 +26,9 @@ suppressPackageStartupMessages({
 ```
 
 ```{r}
-sce.tumor <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-Peng.rds")
-sce.normal.peng <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-PengNormTissue.rds")
+sce.tumor <- readRDS("../../PDAC_TME_on_cluster/output/data/merged-sce/scRNASeq-pancreatic epithelial cell-sce-Peng.rds")
+sce.normal <- readRDS("../../PDAC_TME_on_cluster/output/data/merged-sce/scRNASeq-pancreatic epithelial cell-sce-NormTissue.rds")
+#sce.normal <- readRDS("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-NormTissue.rds")
 #sce.normal.steele <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-sce-SteeleNormTissue.rds")
 ```
 
@@ -36,22 +37,26 @@ sce.normal.peng <- readRDS("../output/v2/data/subset-sce/ductal/scRNASeq-ductal-
 #sce.normal.peng <- sce.normal.peng[common.gene,]
 #sce.normal.steele <- sce.normal.steele[common.gene,]
 #sce.normal <- cbind(sce.normal.peng, sce.normal.steele)
-sce.normal <- sce.normal.peng
-rm(sce.normal.peng)
+#sce.normal <- sce.normal.peng
+#rm(sce.normal.peng)
 ```
 
 ```{r}
-sce.tumor.subsampled <- sce.tumor[,sce.tumor$sample == "CRR034499"]
-sce.normal <- sce.normal[,sample(colnames(sce.normal), 5000)]
-table(sce.tumor.subsampled$predicted.annotation.l1)
+table(sce.tumor$sample)
+#sce.tumor.subsampled <- sce.tumor
+sce.tumor.subsampled <- sce.tumor[,grepl("CRR241798|CRR034499|CRR034500|CRR034501|CRR034503|CRR034506|CRR034507|CRR034510|CRR034511|CRR034516|CRR034519", sce.tumor$sample)]
+#sce.normal <- sce.normal[,sample(colnames(sce.normal), 5000)]
+table(sce.tumor.subsampled$singler.pruned.label)
 ```
 
 ```{r}
-sce.normal$cell_type <- "Normal"
-sce.tumor.subsampled$cell_type <- sce.tumor.subsampled$predicted.annotation.l1
-sce.tumor.subsampled$cell_type <- plyr::mapvalues(sce.tumor.subsampled$cell_type, 
-                                                  from = c("alpha", "beta", "delta", "gamma", "activated_stellate", "quiescent_stellate"),
-                                                  to = c("endocrine", "endocrine", "endocrine", "endocrine", "stellate", "stellate"))
+sce.normal$cell_type <- "Normal_Epithelial"
+sce.tumor.subsampled$cell_type <- sce.tumor.subsampled$singler.pruned.label
+# sce.tumor.subsampled$cell_type <- plyr::mapvalues(sce.tumor.subsampled$cell_type, 
+#                                                   from = c("alpha", "beta", "delta", "gamma", "activated_stellate", "quiescent_stellate"),
+#                                                   to = c("endocrine", "endocrine", "endocrine", "endocrine", "stellate", "stellate"))
+table(sce.tumor.subsampled$cell_type)
+sce.tumor.subsampled$cell_type <- "Tumour_Epithelial"
 table(sce.tumor.subsampled$cell_type)
 ```
 
@@ -74,6 +79,9 @@ head(rownames(sce.normal))
 rownames(sce.normal) <- paste(rowData(sce.normal)[['Symbol']], rowData(sce.normal)[['ensembl_id']], sep = "_")
 rownames(sce.tumor.subsampled) <- paste(rowData(sce.tumor)[['Symbol']], rowData(sce.tumor.subsampled)[['ensembl_id']], sep = "_")
 
+#rownames(sce.normal) <- paste(rowData(sce.normal)[['ensembl_id']], rowData(sce.normal)[['Symbol']], sep = "-")
+#rownames(sce.tumor.subsampled) <- paste(rowData(sce.tumor.subsampled)[['ensembl_id']], rowData(sce.tumor)[['Symbol']], sep = "-")
+
 common.gene <- intersect(rownames(sce.normal), rownames(sce.tumor.subsampled))
 sce.normal <- sce.normal[common.gene,]
 sce.tumor.subsampled <- sce.tumor.subsampled[common.gene,]
@@ -88,6 +96,11 @@ rownames(sce.tumor.subsampled) <- str_split(rownames(sce.tumor.subsampled), patt
 sce.combined <- cbind(sce.tumor.subsampled, sce.normal)
 ```
 
+```{r}
+saveRDS(sce.combined, file = "../../infercnv-snakemake/peng-scRNASeq-manually-filtered-sce-tumour-normal-assigned.rds")
+```
+
+# old infercnv code
 ```{r}
 counts.mtx <- counts(sce.combined)
 length(grep("_", (rownames(counts.mtx))))
@@ -121,7 +134,6 @@ infer <- CreateInfercnvObject(
         ref_group_names= c("Normal"))
 ```
 
-# run infercnv
 ```{r}
 options(scipen = 100)
 infercnv_obj <- infercnv::run(
@@ -147,6 +159,71 @@ infercnv_obj <- infercnv::run(
         save_rds = F,
         save_final_rds = T
     )
+```
+
+# new infercnv code
+```{r}
+rm(sce.tumor, sce.combined)
+```
+
+```{r}
+sce_tumour <- sce.tumor.subsampled[,sce.tumor.subsampled$sample == "CRR241798"]
+ncol(sce_tumour)
+
+sce_normal <- sce.normal
+table(sce_normal$cell_type)
+rm(sce.normal)
+
+if(ncol(sce_normal) > 2000) {
+    sce_normal <- sce_normal[, sample(ncol(sce_normal), 2000)]
+}
+
+patient_sce <- cbind(sce_tumour, sce_normal)
+rm(sce_normal, sce_tumour)
+```
+
+```{r}
+cts <- assay(patient_sce, 'counts')
+
+gene_symbols <- gsub("ENSG[0-9]*-", "", rownames(patient_sce))
+count_mat <- as.matrix(assay(patient_sce, 'counts'))
+cts <- rowsum(count_mat, gene_symbols)
+
+cell_types <- colData(patient_sce)[,"cell_type", drop=FALSE] |> 
+    as.data.frame()
+
+normal_cell_types <- "Normal_Epithelial"
+```
+
+```{r}
+infer <- CreateInfercnvObject(cts, 
+                              "../../infercnv-snakemake/resources/hg38_gencode_v27.txt", 
+                              cell_types, 
+                              ref_group_names = normal_cell_types)
+```
+
+## run infercnv
+```{r}
+infercnv_obj <- infercnv::run(infer, 
+                              cutoff = 0.1, 
+                              out_dir = "infercnv/CRR241798/",
+                              cluster_by_groups = TRUE, 
+                              plot_steps = FALSE, 
+                              denoise = TRUE, 
+                              # noise_filter=snakemake@params$noise_filter, 
+                              HMM_report_by = c('subcluster'), 
+                              tumor_subcluster_pval = 0.01,
+                              HMM = TRUE, 
+                              no_prelim_plot = TRUE, 
+                              num_threads = 16,
+                              leiden_resolution = 0.1, 
+                              png_res = 360)
+```
+
+# analyze infercnv results
+```{r}
+#The infercnv_object has the following attributes, we are insterested in the processed expression data in "expr.data"
+infercnv_obj <- readRDS("../../infercnv-snakemake/output/Peng/infercnv/CRR034500/run.final.infercnv_obj")
 ```
 
 ```{r}

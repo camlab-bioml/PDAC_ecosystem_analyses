@@ -1,0 +1,68 @@
+---
+title: "Process Cheng 2021 Myeloid markers"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(patchwork)
+})
+```
+
+# setup
+```{r}
+n_top_genes = 50
+```
+
+# load marker files (tsv)
+```{r}
+getwd()
+list.files(paste(getwd(), "../resources/markers/Cheng-2021-markers", sep = "/"))
+
+markers.list <- lapply(list.files(paste(getwd(), "../resources/markers/Cheng-2021-markers", sep = "/"), full.names = T), read_tsv)
+names(markers.list) <- lapply(markers.list, function(markers) markers$cluster[1])
+```
+
+# get cell type names
+```{r}
+celltypes.cheng <- list.files(paste(getwd(), "../resources/markers/Cheng-2021-markers", sep = "/"))
+celltypes.cheng <- str_split(celltypes.cheng, "markers_", simplify = T)[,2]
+celltypes.cheng <- str_split(celltypes.cheng, ".tsv", simplify = T)[,1]
+celltypes.cheng
+```
+
+
+
+
+# get top markers
+```{r}
+df.markers <- lapply(markers.list, function(markers) {
+  markers %>%
+    slice_max(scores, n = n_top_genes) %>%
+    pull(names)
+}) %>% as.data.frame()
+```
+
+# save the selected markers
+```{r}
+write.table(df.markers, file = "../resources/markers/known-signature-markers/DC/Cheng_myeloid_marker_list.csv", sep = ",", row.names = F)
+list.files(paste(getwd(), "../resources/markers/known-signature-markers/DC/", sep = "/"))
+```
+
+
+
+
+
+
+
+
+

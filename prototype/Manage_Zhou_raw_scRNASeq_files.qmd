@@ -1,0 +1,67 @@
+---
+title: "Manage Zhou (HTAN) raw scRNASeq files"
+format: html
+editor: visual
+---
+
+```{r}
+
+```
+
+```{r}
+cohort <- "Zhou"
+```
+
+```{r}
+metadata.1 <- read_csv(paste0("../data/scrnaseq/", cohort, "/metadata/syn51122332_ScRNA-seqLevel3.csv"))
+metadata.2 <- read_csv("../data/scrnaseq/", cohort, "/metadata/syn51122325_ScRNA-seqLevel3.csv")
+setdiff(names(metadata.2), names(metadata.1))
+
+metadata <- bind_rows(metadata.1, metadata.2)
+rm(metadata.1, metadata.2)
+
+metadata$Filename
+metadata$sample <- str_split(metadata$Filename, "sc_RNAseq_level_3/|sn_RNAseq_level_3/", simplify = T)[,2]
+metadata$sample <- str_split(metadata$sample, "-barcodes|-features|-matrix", simplify = T)[,1]
+metadata <- metadata %>% select(-eTag, -Uuid, -`Workflow Link`, -`scRNAseq Workflow Parameters Description`, -`scRNAseq Workflow Type`, -`Linked Matrices`)
+
+write_csv(metadata, paste0("../data/scrnaseq/", cohort, "/metadata/metadata.csv"))
+```
+
+```{r}
+file.names <- list.files(paste0("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/data/scrnaseq/", cohort, "/raw-data/"))
+file.names
+```
+
+```{r}
+folder.names <- str_split(file.names, "-barcodes|-features|-matrix", simplify = T)[,1]
+file.ext <- str_split(file.names, "-", simplify = T)[,3] %>% unique() %>% grep("gz", ., value = T)
+folder.names %>% unique()
+file.ext
+
+length(metadata$sample %>% unique())
+length(folder.names %>% unique())
+intersect(metadata$sample %>% unique(), folder.names %>% unique())
+setdiff(metadata$sample %>% unique(), folder.names %>% unique())
+setdiff(folder.names %>% unique(), metadata$sample %>% unique())
+```
+
+```{r}
+lapply(folder.names %>% unique(), function(folder.name) {
+  dir.create(paste0("../data/scrnaseq/", cohort, "/raw-data/", folder.name, "/outs/filtered_feature_bc_matrix/"), recursive = T, showWarnings = F)
+})
+```
+
+```{r}
+lapply(folder.names %>% unique(), function(folder.name) {
+  file.copy(from = paste0("../data/scrnaseq/", cohort, "/raw-data/", folder.name, "-", file.ext),
+            to = paste0("../data/scrnaseq/", cohort, "/raw-data/", folder.name, "/outs/filtered_feature_bc_matrix/", file.ext))
+})
+```
+
+```{r}
+df.sample.names <- metadata %>% select(-Component, -Filename, -`File Format`, -`Data Category`, -entityId, -`Validating Fiolename`, -`HTAN Data File ID`) %>% 
+  relocate(sample) %>% 
+  distinct()
+write_csv(df.sample.names, paste0("../data/scrnaseq/", cohort, "/metadata/samples.csv"))
+```

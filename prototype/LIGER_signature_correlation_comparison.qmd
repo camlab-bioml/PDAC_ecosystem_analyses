@@ -8,31 +8,45 @@ editor: visual
 suppressPackageStartupMessages({
   library(tidyverse)
   library(ComplexHeatmap)
+  library(ggpmisc)
+  library(ggrepel)
 })
 ```
 
 # Discovery cohort
+
 ```{r}
-patient.profiles.df <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validated/loading-mean/patient-full-signature-profiles-loading-mean-validated.tsv")
+patient.profiles.df <- read_tsv("../../PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/patient-signature-profiles/collapsed/loading-median/patient-full-signature-profiles-loading-median-collapsed.tsv")
+```
+
+```{r}
+treatment.dis.df <- read_csv("../../PDAC_TME_on_cluster/resources/metadata/clinical-data/discovery.csv")
 ```
 
 ## remove CD45 sorted samples, get meta data
+
 ```{r}
-patient.profiles.df <- filter(patient.profiles.df, !grepl("CD45", sample))
+patient.profiles.df <- filter(patient.profiles.df, !grepl("CD45m", sample))
 
 patient.profiles.meta <- select(patient.profiles.df, cohort, sample)
+
+patient.profiles.meta <- left_join(patient.profiles.meta, treatment.dis.df, by = c("cohort", "sample"))
 ```
 
 ## gather into tidy format and get a cell type for each signature
+
 ```{r}
 patient.profiles.df2 <- select(patient.profiles.df, -cohort) |> 
   gather(signature, value, -sample) |> 
   replace_na(list(value=0)) |> 
-  mutate(cell_type = gsub("| [0-9]", "", signature)) |> 
-  mutate(cell_type = gsub("[0-9]", "" , cell_type))
+  mutate(cell_type = gsub("| Rep [0-9]$", "", signature)) |> 
+  mutate(cell_type = gsub(" Rep [0-9][0-9]$", "" , cell_type))
+
+table(patient.profiles.df2$cell_type)
 ```
 
 ## scale the signatures so they have a max value 1 and min value 0
+
 ```{r}
 patient.profiles.df2 <- group_by(patient.profiles.df2, cell_type, signature) |>
   mutate(minn = min(value, na.rm=TRUE),
@@ -43,6 +57,7 @@ patient.profiles.df2 <- group_by(patient.profiles.df2, cell_type, signature) |>
 ```
 
 ## un-tidy this back into matrix form
+
 ```{r}
 patient.profiles.df3 <- select(patient.profiles.df2, sample, signature, scaled_value) |> 
   spread(signature, scaled_value)
@@ -55,10 +70,12 @@ patient.profiles.mat <- patient.profiles.mat[patient.profiles.df$sample,]
 ```
 
 ## heatmap
+
 ```{r}
 set.seed(42L)
 top_annot <- columnAnnotation(
-  cohort = patient.profiles.meta$cohort
+  cohort = patient.profiles.meta$cohort,
+  treatment = patient.profiles.meta$treatment == 1
 )
 right_annot <- rowAnnotation(
   celltype = str_split(colnames(patient.profiles.mat), " ", simplify = T)[,1]
@@ -72,66 +89,97 @@ dev.off()
 ```
 
 # Validation cohort
+
 ```{r}
-sig.dis.val.map <- read_tsv("dis-val-sig-mapping.tsv")
+# sig.dis.val.map <- read_tsv("dis-val-sig-mapping.tsv")
 ```
 
 ```{r}
-peng.hwang.sigs.df <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validation/loading-mean/patient-full-signature-profiles-loading-mean-validation.tsv")
+patient.validation.profiles.df <- read_tsv("../../PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/patient-signature-profiles/collapsed-scored-validation/loading-median/patient-full-signature-profiles-loading-median-collapsed-scored-validation.tsv")
 ```
 
 ```{r}
-validating.sigs <- filter(sig.dis.val.map, !grepl("|", validated.sig.name, fixed=TRUE)) |> 
-  filter(!is.na(validated.sig.name))
+treatment.val.df <- read_csv("../../PDAC_TME_on_cluster/resources/metadata/clinical-data/validation.csv")
+```
 
-peng.hwang.sigs.df <- select(peng.hwang.sigs.df, cohort, sample, all_of(validating.sigs$validation.sig.name))
+```{r}
+patient.validation.profiles.meta <- select(patient.validation.profiles.df, cohort, sample)
 
-names(peng.hwang.sigs.df) <- plyr::mapvalues(names(peng.hwang.sigs.df), 
-                                    from = validating.sigs$validation.sig.name,
-                                    to = validating.sigs$validated.sig.name)
+patient.validation.profiles.meta <- left_join(patient.validation.profiles.meta, treatment.val.df, by = c("cohort", "sample"))
 ```
 
 ## normalize as per the discovery cohort
+
 ```{r}
-peng.hwang.tidy.df <- select(peng.hwang.sigs.df, -cohort) |> 
+patient.validation.profiles.df2 <- select(patient.validation.profiles.df, -cohort) |> 
   gather(signature, value, -sample) |> 
-  replace_na(list(value=0)) |>  
-  mutate(cell_type = gsub("| [0-9]", "", signature)) |> 
-  mutate(cell_type = gsub("[0-9]", "" , cell_type)) |>
+  replace_na(list(value = 0)) |>  
+  mutate(cell_type = gsub("| RepVal [0-9]$", "", signature)) |> 
+  mutate(cell_type = gsub(" RepVal [0-9][0-9]$", "" , cell_type)) |>
   group_by(cell_type, signature) |>
   mutate(minn = min(value, na.rm=TRUE),
          maxx = max(value, na.rm=TRUE)) |>
   mutate(scaled_value = (value - minn) / (maxx - minn)) |>
   #mutate(scaled_value = value) |> 
   ungroup()
+
+table(patient.validation.profiles.df2$cell_type)
 ```
 
 ## un-tidy this back into matrix form
+
 ```{r}
-peng.hwang.tidy.again.df <- select(peng.hwang.tidy.df, sample, signature, scaled_value) |> 
+patient.validation.profiles.df3 <- select(patient.validation.profiles.df2, sample, signature, scaled_value) |> 
   spread(signature, scaled_value)
 
-peng.hwang.mat <- select(peng.hwang.tidy.again.df, -sample) |> 
+patient.validation.profiles.mat <- select(patient.validation.profiles.df3, -sample) |> 
   as.matrix()
-rownames(peng.hwang.mat) <- peng.hwang.tidy.again.df$sample
+rownames(patient.validation.profiles.mat) <- patient.validation.profiles.df3$sample
 
-peng.hwang.mat <- peng.hwang.mat[peng.hwang.sigs.df$sample,]
+patient.validation.profiles.mat <- patient.validation.profiles.mat[patient.validation.profiles.df$sample,]
 ```
 
 ## see how these match
-```{r}
-common.sigs <- intersect(colnames(patient.profiles.mat), colnames(peng.hwang.mat))
 
-png(filename = "test15.png", width = 15, height = 10, units = "in", res = 321)
+```{r}
+colnames(patient.profiles.mat) <- gsub(" Rep", "", colnames(patient.profiles.mat))
+colnames(patient.validation.profiles.mat) <- gsub(" RepVal", "", colnames(patient.validation.profiles.mat))
+common.sigs <- intersect(colnames(patient.profiles.mat), colnames(patient.validation.profiles.mat))
+
+png(filename = "test15.png", width = 20, height = 10, units = "in", res = 321)
 Heatmap(t(patient.profiles.mat)[common.sigs,], name = "validated/discovery") + 
-  Heatmap(t(peng.hwang.mat)[common.sigs,], name = "validation")
+  Heatmap(t(patient.validation.profiles.mat)[common.sigs,], name = "validation")
 dev.off()
 ```
 
 # Are signature correlations consistent between cohorts?
+
 ```{r}
-cc.disc <- cor(patient.profiles.mat, method="spearman")
-cc.val <- cor(peng.hwang.mat, method="spearman")
+table(patient.profiles.meta$treatment)
+table(patient.validation.profiles.meta$treatment)
+```
+
+## treated samples
+
+```{r}
+cc.disc <- cor(patient.profiles.mat[patient.profiles.meta |> filter(treatment == 1) |> pull(sample),], method="spearman")
+cc.val <- cor(patient.validation.profiles.mat[patient.validation.profiles.meta |> filter(treatment == 1) |> pull(sample),], method="spearman")
+cc <- cc.disc
+
+dfc.disc <- as.data.frame(cc.disc) |> 
+  rownames_to_column('signature_1') |> 
+  gather(signature_2, correlation_discovery, -signature_1)
+
+dfc.val <- as.data.frame(cc.val) |> 
+  rownames_to_column('signature_1') |> 
+  gather(signature_2, correlation_validation, -signature_1)
+```
+
+## untreated samples
+
+```{r}
+cc.disc <- cor(patient.profiles.mat[patient.profiles.meta |> filter(treatment == 0) |> pull(sample),], method="spearman")
+cc.val <- cor(patient.validation.profiles.mat[patient.validation.profiles.meta |> filter(treatment == 0) |> pull(sample),], method="spearman")
 cc <- cc.disc
 
 dfc.disc <- as.data.frame(cc.disc) |> 
@@ -144,6 +192,7 @@ dfc.val <- as.data.frame(cc.val) |>
 ```
 
 ## join these together
+
 ```{r}
 dfc <- inner_join(dfc.disc, dfc.val) |> 
   as_tibble() |> 
@@ -153,14 +202,18 @@ dfc
 ```
 
 ## are within-cell type correlations more correlated than between?
+
 ```{r}
 dfc <- dfc |> 
-  mutate(cell_type_1 = gsub("| [0-9]", "", signature_1)) |> 
-  mutate(cell_type_2= gsub("| [0-9]", "", signature_2)) |> 
+  mutate(cell_type_1 = gsub("| [0-9]$", "", signature_1)) |> 
+  mutate(cell_type_2 = gsub("| [0-9]$", "", signature_2)) |> 
+  mutate(cell_type_1 = gsub("| [0-9][0-9]$", "", cell_type_1)) |> 
+  mutate(cell_type_2 = gsub("| [0-9][0-9]$", "", cell_type_2)) |>
   mutate(same_cell_type = cell_type_1 == cell_type_2)
 ```
 
 ## let's not double-count correlations
+
 ```{r}
 dfc$cell_type_str <- apply(dfc, 1, function(x) {
   x <- x[c('signature_1', 'signature_2')]
@@ -171,6 +224,40 @@ dfc$cell_type_str <- apply(dfc, 1, function(x) {
 dfc <- dfc[!duplicated(dfc$cell_type_str),] 
 ```
 
+## remove ambient RNA signatures
+```{r}
+# signatures to remove
+ambient.sigs <- c("pancreatic epithelial cell 5", "pancreatic epithelial cell 13", 
+                  "fibroblast 3", 
+                  "macrophage 2", "macrophage 4", 
+                  "CD4-positive, alpha-beta T cell 4", 
+                  "myeloid dendritic cell 9")
+
+dfc.for.plot <- dfc
+dfc.for.plot <- dfc.for.plot |>
+  filter(!(signature_1 %in% ambient.sigs)) |>
+  filter(!(signature_2 %in% ambient.sigs))
+```
+
+## update cell type labels for plotting
+```{r}
+dfc.for.plot$cell_type_1 <- plyr::mapvalues(dfc.for.plot$cell_type_1,
+                                            from = c("CD8-positive, alpha-beta T cell", "CD4-positive, alpha-beta T cell", "blood vessel endothelial cell",
+                                                     "pancreatic epithelial cell", "fibroblast", "myeloid dendritic cell", "macrophage"),
+                                            to = c("CD8 T/NK cell", "CD4 T cell", "Endothelial cell", 
+                                                   "Epithelial cell", "Fibroblast", "mDC", "Monocyte/Macrophage"))
+dfc.for.plot$cell_type_2 <- plyr::mapvalues(dfc.for.plot$cell_type_2,
+                                            from = c("CD8-positive, alpha-beta T cell", "CD4-positive, alpha-beta T cell", "blood vessel endothelial cell",
+                                                     "pancreatic epithelial cell", "fibroblast", "myeloid dendritic cell", "macrophage"),
+                                            to = c("CD8 T/NK cell", "CD4 T cell", "Endothelial cell", 
+                                                   "Epithelial cell", "Fibroblast", "mDC", "Monocyte/Macrophage"))
+
+celltype.pal <- readRDS("../../PDAC_TME_on_cluster/output/figures/celltype-palette.rds")
+cell.type.pal.to.use <- celltype.pal$color_dis
+names(cell.type.pal.to.use) <- str_split(celltype.pal$Cell_type_dis, " \\(", simplify = TRUE)[,1]
+```
+
+## testing overall co-occurrence agreement between discovery and validation
 ```{r}
 with(dfc, cor.test(correlation_discovery, correlation_validation))
 
@@ -180,26 +267,91 @@ with(filter(dfc, !same_cell_type), cor.test(correlation_discovery, correlation_v
 ```
 
 ```{r}
-filter(dfc, same_cell_type) |> 
+dfc.for.plot <- dfc.for.plot |>
+  mutate(same_cell_type_for_plot = ifelse(same_cell_type, 
+                                          "Co-occurrence within cell type", 
+                                          "Co-occurrence between cell types"))
+
+ggplot(dfc.for.plot, aes(x = correlation_discovery, y = correlation_validation)) +
+  geom_point(aes(color = same_cell_type_for_plot), alpha = 0.5) +
+  #facet_wrap(~ cell_type_1, scales = "free", nrow = 2) + 
+  geom_smooth(method='lm', colour = "grey30") + 
+  stat_cor() +
+  labs(color = "Same celltype",
+       x = "Signature co-occurrence in discovery", 
+       y = "Signature co-occurrence in validation") +
+  theme_pubr() + 
+  theme(legend.title = element_blank(),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold")) + 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+
+ggsave("test-sig-cooccur.png", device = "png", width = 5, height = 5.5, units = "in", dpi = 321, bg = "white")
+```
+
+## testing intra/inter celltype co-occurrence
+
+```{r}
+filter(dfc.for.plot, same_cell_type) |> 
   ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
   geom_point(aes(colour = cell_type_1)) +
-  facet_wrap(~ cell_type_1, scales = "free") + 
-  geom_smooth(method='lm')
+  scale_color_manual(values = cell.type.pal.to.use) +
+  facet_wrap(~ cell_type_1, scales = "free", nrow = 2) + 
+  geom_smooth(method='lm') + 
+  stat_cor() +
+  labs(colour = "Celltype",
+       x = "Signature co-occurrence in discovery", 
+       y = "Signature co-occurrence in validation") +
+  theme_pubr() + 
+  theme(axis.title = element_text(face = "bold"))
 
-ggsave("test16.png", device = "png")
+ggsave("test16.png", device = "png", width = 10, height = 5, units = "in", dpi = 321, bg = "white")
+```
 
-filter(dfc, !same_cell_type) |> 
+```{r}
+table(dfc.for.plot %>% filter(!same_cell_type) %>% pull(cell_type_1))
+table(dfc.for.plot %>% filter(!same_cell_type) %>% pull(cell_type_2))
+#View(dfc.for.plot %>% filter(!same_cell_type))
+#View(dfc.for.plot %>% filter(!same_cell_type) %>% filter(cell_type_1 == "B cell" | cell_type_2 == "B cell"))
+```
+
+```{r}
+dfc.for.plot_list <- list()
+
+for (ct in union(unique(dfc.for.plot$cell_type_1), unique(dfc.for.plot$cell_type_2))) {
+  dfc.for.plot_list[[ct]] <- dfc.for.plot %>% filter(!same_cell_type) %>% filter(cell_type_1 == ct | cell_type_2 == ct) |>
+    mutate(facet_cell_type = ct) |>
+    mutate(cell_type = ifelse(cell_type_1 == ct, cell_type_2, cell_type_1))
+    # ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
+    # geom_point(aes(colour = cell_type)) +
+    # scale_color_manual(values = celltype.pal) +
+    # geom_smooth(method='lm') + 
+    # stat_cor() +
+    # labs(title = ct)
+    # theme_pubr()
+}
+rm(ct)
+```
+
+```{r}
+Reduce(rbind, dfc.for.plot_list) |>
   ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
-  geom_point(aes(colour = cell_type_2)) +
-  facet_wrap(~ cell_type_1, scales = "free") + 
-  geom_smooth(method='lm')
-
-ggsave("test17.png", device = "png")
+  geom_point(aes(colour = cell_type)) +
+  scale_color_manual(values = cell.type.pal.to.use) +
+  facet_wrap(~ facet_cell_type, scales = "free", nrow = 2) + 
+  geom_smooth(method='lm') + 
+  stat_cor() +
+  labs(colour = "Celltype",
+       x = "Signature co-occurrence in discovery", 
+       y = "Signature co-occurrence in validation") +
+  theme_pubr() + 
+  theme(axis.title = element_text(face = "bold"))
+ggsave("test17.png", device = "png", width = 10, height = 5, units = "in", dpi = 321, bg = "white")
 ```
 
 # Which signatures validate the best?
+
 ```{r}
-filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4)
 filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4) |> 
   ggplot(aes(x = correlation_discovery, y = correlation_validation)) +
   geom_point(aes(colour = cell_type_1)) +
@@ -210,14 +362,272 @@ filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4) |>
 ggsave("test18.png", device = "png")
 ```
 
+## treated samples
+
 ```{r}
-filter(dfc, correlation_discovery < -0.25, correlation_validation < -0.25)
+dfc.treated <- filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4)
+filter(dfc, correlation_discovery < -0.4, correlation_validation < -0.4)
 ```
 
 ```{r}
 filter(dfc, !same_cell_type)$cell_type_1 %>% table() 
 ```
 
+## untreated samples
 
+```{r}
+dfc.untreated <- filter(dfc, correlation_discovery > 0.4, correlation_validation > 0.4)
+filter(dfc, correlation_discovery < -0.4, correlation_validation < -0.4)
+```
+
+```{r}
+filter(dfc, !same_cell_type)$cell_type_1 %>% table() 
+```
+
+## find treatment specific signature pairs
+
+```{r}
+intersect(dfc.treated$cell_type_str, dfc.untreated$cell_type_str)
+
+setdiff(dfc.treated$cell_type_str, dfc.untreated$cell_type_str)
+
+setdiff(dfc.untreated$cell_type_str, dfc.treated$cell_type_str)
+```
+
+```{r}
+dfc.treatment <- full_join(dfc.treated, dfc.untreated, 
+                           by = c("signature_1", "signature_2", "cell_type_1", "cell_type_2", "same_cell_type", "cell_type_str"),
+                           suffix = c("_treated", "_untreated"))
+```
+
+# compare signature co-occurrence in discovery vs. validation/find immunosuppressive/basal signatures
+
+```{r}
+dfc <- read_tsv("../../PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/signature-correlation-comparison/loading-mean/patient-full-signature-profiles-loading-mean-correlation-data-frame.tsv")
+View(dfc)
+```
+
+```{r}
+dfc.list <- lapply(sig.interpt$signature, function(sig) {
+  dfc |> 
+    filter(grepl(paste0("^", sig, "_|_", sig, "$"), cell_type_str)) |>
+    mutate(high_confidence = ifelse(correlation_discovery > 0.4 & correlation_validation > 0.4, TRUE, FALSE))|>
+    mutate(signature = ifelse(signature_1 == sig, signature_2, 
+                              ifelse(signature_2 == sig, signature_1, NA))) |>
+    mutate(celltype = gsub(" [0-9]| [0-9][0-9]", "", signature))
+})
+names(dfc.list) <- sig.interpt$signature
+```
+
+```{r}
+lapply(sig.interpt$signature, function(sig) {
+  dfc.sig <- dfc.list[[sig]]
+  
+  ggplot(dfc.sig, aes(x = correlation_discovery, y = correlation_validation, color = high_confidence)) +
+  geom_point() +
+  # facet_wrap(~ cell_type_1, scales = "free", nrow = 2) + 
+  # geom_smooth(method='lm') + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+  geom_label_repel(
+    data = subset(dfc.sig, correlation_discovery > 0.4 & correlation_validation > 0.4),
+    #data = subset(dfc.sig, grepl("epithelial", cell_type_str)),
+    aes(label = gsub(paste0("^", sig, "_|_", sig, "$"), "", cell_type_str)),
+    size = 3,
+    box.padding = unit(0.35, "lines"),
+    point.padding = unit(0.3, "lines")
+  ) +
+  theme_pubr() + 
+  labs(title = paste0("Loading correlation with ", sig),
+       x = "Correlation in discovery", 
+       y = "Correlation in validation")
+})
+```
+
+```{r}
+dfc.immune.supp <- dfc.CD8.9 |> filter(correlation_discovery < -0.1 & correlation_validation < -0.1)
+dfc.immune.actv <- dfc.CD8.9 |> filter(correlation_discovery > 0.1 & correlation_validation > 0.1)
+
+dfc.immune.supp <- dfc.CD8.2 |> filter(correlation_discovery > 0.2 & correlation_validation > 0.2)
+```
+
+## load dis-val correlation and dis-dis validation
+
+```{r}
+dis.val.corr <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../../PDAC_TME_on_cluster/output/results/LIGER/signature-analysis/", 
+                  ct, "/signature-validation/", ct, "-validated-signatures.tsv"))
+})
+names(dis.val.corr) <- celltypes
+
+dis.val.corr <- lapply(dis.val.corr, function(df) {
+  df |> filter(validation.1.corr > 0.5)
+})
+
+dis.val.corr <- lapply(celltypes, function(ct) {
+  dis.val.corr[[ct]] |> mutate(validated.name = paste0(ct, " ", seq(nrow(dis.val.corr[[ct]]))))
+})
+names(dis.val.corr) <- celltypes
+
+collapse.guide <- read_tsv("../../PDAC_TME_on_cluster/output/results/LIGER/signature-analysis/signature-collapse-guide.tsv")
+collapsed.sigs <- str_split(collapse.guide$validated.sig.name, "\\| ", simplify = T)[,2]
+collapsed.sigs <- collapsed.sigs[nzchar(collapsed.sigs)]
+
+for (sig in collapsed.sigs) {
+  ct = gsub(" [0-9]| [0-9][0-9]", "", sig)
+  dis.val.corr[[ct]] <- dis.val.corr[[ct]] |>
+    filter(validated.name != sig) 
+  dis.val.corr[[ct]] <- dis.val.corr[[ct]] |>
+    mutate(validated.name = paste0(ct, " ", seq(nrow(dis.val.corr[[ct]]))))
+}
+rm(sig, ct)
+
+dis.val.corr <- Reduce(rbind, dis.val.corr)
+dis.val.corr.for.join <- dis.val.corr |> select(validated.name, validation.1.corr)
+names(dis.val.corr.for.join) <- c("signature", "validation confidence")
+```
+
+```{r}
+dfc.list <- lapply(dfc.list, function(dfc.sig) {
+  left_join(dfc.sig, dis.val.corr.for.join, by = "signature")
+})
+```
+
+## rename signatures and celltypes
+```{r}
+celltype_rename <- read_csv("../../PDAC_TME_on_cluster/resources/cell-type-assignment/cell_types_to_rename_for_plot.csv")
+```
+
+```{r}
+celltype.pal <- readRDS("../../PDAC_TME_on_cluster/output/figures/celltype-palette.rds")
+cell.type.pal.to.use <- celltype.pal$color_dis
+names(cell.type.pal.to.use) <- str_split(celltype.pal$Cell_type_dis, " \\(", simplify = TRUE)[,1]
+```
+
+### also make sure some signatures with same inpterpretation don't get stacked on each other
+```{r}
+dfc.list <- lapply(dfc.list, function(dfc.sig) {
+  dfc.sig$celltype <- plyr::mapvalues(dfc.sig$celltype, from = celltype_rename$old_name, celltype_rename$new_name)
+  dfc.sig$signature <- plyr::mapvalues(dfc.sig$signature, 
+                                         from = sig.interpt$signature, 
+                                         to = sig.interpt$`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`)
+  dfc.sig |> 
+    filter(!grepl("Ambient RNA|ambient RNA|^MALAT1/NEAT1$", signature)) |>
+    group_by(signature) |>
+    mutate(unique_signature = paste0(signature, "_-_", row_number())) |>
+    ungroup() |>
+    arrange(desc(correlation_discovery))
+})
+```
+
+## draw some bar plots
+```{r}
+lapply(names(dfc.list), function(sig) {
+  dfc.sig <- dfc.list[[sig]]
+  plot.title <- sig.interpt |> filter(signature == sig) |> pull(`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`)
+  
+  p1 <- ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_discovery)) +
+    geom_bar(stat = "identity", aes(fill = celltype, alpha = `validation confidence`)) +
+    scale_fill_manual(values = cell.type.pal.to.use) +
+    labs(title = plot.title, x = NULL, y = "Co-occurrence in discovery") +
+    theme_pubr() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+    theme(axis.text.x = element_blank(),
+          plot.margin = margin(l = 0 + 200))
+  
+  p2 <- ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_validation)) +
+    geom_bar(stat = "identity", aes(fill = celltype, alpha = `validation confidence`)) +
+    scale_x_discrete(labels = dfc.sig$signature) + 
+    scale_fill_manual(values = cell.type.pal.to.use) +
+    labs(x = NULL, y = "Co-occurrence in validation") +
+    theme_pubr() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          plot.margin = margin(l = 0 + 200))
+  p1 / p2 + plot_layout(guides = "collect") &
+    theme(legend.position='top')
+  ggsave(paste0("sig-cooccur/test-", sig, "-cooccur.png"), width = 18, height = 15, units = "in", dpi = 321)
+  
+  ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_discovery)) +
+    geom_bar(stat = "identity", aes(alpha = `validation confidence`)) +
+    scale_x_discrete(labels = dfc.sig$signature) + 
+    labs(title = plot.title, x = NULL, y = "Co-occurrence in discovery") +
+    theme_pubr() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          plot.margin = margin(l = 0 + 200))
+  ggsave(paste0("sig-cooccur/test-", sig,"-cooccur-no-color.png"), width = 18, height = 10, units = "in", dpi = 321)
+})
+```
+
+# general signature co-occurrence agreement between discovery an validation
+
+```{r}
+# dfc.list <- lapply(dis.val.corr.for.join$signature, function(sig) {
+#   dfc |> filter(signature_1 == sig | signature_2 == sig) |>
+#     mutate(signature = ifelse(signature_1 == sig, signature_2, 
+#                               ifelse(signature_2 == sig, signature_1, NA))) |>
+#     mutate(celltype = gsub(" [0-9]| [0-9][0-9]", "", signature))
+# })
+# names(dfc.list) <- dis.val.corr.for.join$signature
+
+dis.val.agree <- lapply(dfc.list, function(df) {
+  cor.test(df$correlation_discovery, df$correlation_validation, use = "na.or.complete")
+})
+
+dis.val.agree <- data.frame(signature = names(dis.val.agree),
+                            dis_val_corr = unlist(lapply(dis.val.agree, function(corr.obj) corr.obj$estimate)),
+                            p_value = unlist(lapply(dis.val.agree, function(corr.obj) corr.obj$p.value)))
+
+dis.val.agree <- dis.val.agree |>
+  mutate(celltype = gsub(" [0-9]| [0-9][0-9]", "", signature))
+```
+
+```{r}
+ggplot(dis.val.agree, aes(x = reorder(signature, -dis_val_corr), y = dis_val_corr)) +
+  geom_bar(stat = "identity", aes(fill = celltype)) +
+  scale_fill_npg() +
+  labs(x = NULL, y = "Correlation of co-occurrence between discovery and validation") +
+  geom_text(aes(label = ifelse(p_value < 0.01, "*", "")), 
+            position = position_dodge(width = .9), vjust = -.1, size = 20 / .pt) +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggsave("test-sig-cooccur-agree-new.png", width = 15, height = 10, units = "in", dpi = 321)
+```
+
+```{r}
+dis.val.agree <- dis.val.agree |> 
+  filter(!grepl("Ambient RNA|ambient RNA|^MALAT1/NEAT1$", signature)) |>
+  group_by(signature) |>
+  mutate(unique_signature = paste0(signature, "_-_", row_number())) |>
+  ungroup() |>
+  arrange(desc(dis_val_corr))
+```
+
+```{r}
+margin_spacer <- function(x) {
+  # where x is the column in your dataset
+  #left_length <- nchar(levels(factor(x)))[1]
+  left_length <- nchar(x)[1]
+  if (left_length > 8) {
+    return((left_length - 8) * 4)
+  }
+  else
+    return(0)
+}
+```
+
+```{r}
+ggplot(dis.val.agree, aes(x = reorder(unique_signature, -dis_val_corr), y = dis_val_corr)) +
+  geom_bar(stat = "identity", aes(fill = celltype)) +
+  scale_x_discrete(labels = dis.val.agree$signature) + 
+  scale_fill_manual(values = cell.type.pal.to.use) +
+  labs(x = NULL, y = "Correlation of co-occurrence between discovery and validation") +
+  geom_text(aes(label = ifelse(p_value < 0.01, "*", "")), 
+            position = position_dodge(width = .9), vjust = -.1, size = 20 / .pt) +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        #plot.margin = margin(l = 0 + margin_spacer(dis.val.agree$signature))
+        plot.margin = margin(l = 0 + 32))
+ggsave("test-sig-cooccur-agree-new-rename.png", width = 18, height = 12, units = "in", dpi = 321)
+```
 
 

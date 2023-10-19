@@ -155,8 +155,38 @@ Heatmap(sigprofile.mtx.with.clinical.stage,
 dev.off()
 ```
 
+# Score collapsed signatures in discovery and validation
+```{r}
+holder.sigprofile.df <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validation/loading-mean/patient-full-signature-profiles-loading-mean-validation.tsv")
+holder.sigprofile.mtx <- holder.sigprofile.df %>% select(-cohort, -sample) %>% as.matrix()
 
+holder.celltypes <- str_split(colnames(holder.sigprofile.mtx), " ", simplify = T)[,1] %>% unique
 
+holder.sig.dis.val.map <- lapply(holder.celltypes, function(ct) {
+  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", ct, "/signature-validation/", ct, "-validated-signatures.tsv"))
+})
+names(holder.sig.dis.val.map) <- holder.celltypes
+
+holder.sig.dis.val.map <- Reduce(rbind, holder.sig.dis.val.map)
+holder.sig.dis.val.map <- holder.sig.dis.val.map %>% select(validated.corr.sig, validation.corr.1)
+holder.sig.dis.val.map$validation.corr.1 <- str_split(holder.sig.dis.val.map$validation.corr.1, " ", simplify = T)[,2]
+names(holder.sig.dis.val.map) <- c("validated.sig.name", "validation.sig.num")
+holder.sig.dis.val.map$validation.sig.name <- paste(str_split(holder.sig.dis.val.map$validated.sig.name, " ", simplify = T)[,1],
+                                                     holder.sig.dis.val.map$validation.sig.num)
+holder.sig.dis.val.map$validation.sig.num <- NULL
+holder.sig.dis.val.map <- holder.sig.dis.val.map %>% drop_na()
+
+holder <- data.frame(validation.sig.name = colnames(holder.sigprofile.df))
+holder <- holder %>% filter(validation.sig.name != "cohort" & validation.sig.name != "sample")
+
+holder.sig.dis.val.map <- full_join(holder.sig.dis.val.map, holder, by = "validation.sig.name")
+holder.sig.dis.val.map <- holder.sig.dis.val.map %>% arrange(factor(validation.sig.name, levels = holder$validation.sig.name))
+
+column.annot <- holder.sig.dis.val.map %>% group_by(validation.sig.name) %>% mutate(column.annot = paste(validated.sig.name, collapse = " | "))
+column.annot <- column.annot %>% select(-validated.sig.name) %>% distinct()
+
+names(column.annot) <- c("validation.sig.name", "validated.sig.name")
+```
 
 
 

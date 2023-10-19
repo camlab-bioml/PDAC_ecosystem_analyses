@@ -1,0 +1,552 @@
+---
+title: "Figure 2"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(scales)
+  library(BiocParallel)
+  library(sjstats)
+  library(dittoSeq)
+  library(ggplotify)
+  library(ggsci)
+  library(ggpubr)
+  library(ComplexHeatmap)
+  library(patchwork)
+  library(cowplot)
+  library(circlize)
+})
+```
+
+```{r}
+celltypes <- c("CD8-positive, alpha-beta T cell", "CD4-positive, alpha-beta T cell", "B cell", "blood vessel endothelial cell", "pancreatic epithelial cell", "fibroblast", "myeloid dendritic cell", "macrophage")
+conditions <- c("collapsed", "collapsed-scored-validation")
+```
+
+# load signature loading matrices
+```{r}
+sig.loading.mtx.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    df <- read_tsv(paste0("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME_on_cluster/output/results/LIGER/signature-analysis/", 
+                    ct, "/loading-matrices/", ct, "-signature-loading-", condition, ".tsv"))
+    names(df) <- gsub("Rep|RepVal", "Sig", names(df))
+    df
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.mtx.list) <- conditions
+
+sig.loading.mtx.metadata.list <- lapply(sig.loading.mtx.list, function(the.list) {
+  lapply(the.list, function(df) {
+    df |> select(where(is.character))
+  })
+})
+```
+
+# summarize on sample level
+## scale on cell level/restructure dataframes
+```{r}
+sig.loading.mtx.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.mtx.df <- sig.loading.mtx.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    cbind(sig.loading.mtx.df |> reframe(across(where(is.numeric), scale)),
+          #sig.loading.mtx.df |> select(where(is.numeric)),
+          sig.loading.mtx.metadata.df)
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.mtx.list) <- conditions
+```
+
+## get within sample variances
+```{r}
+sig.loading.var.list <- lapply(conditions, function(condition) {
+  print(condition)
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.mtx.df <- sig.loading.mtx.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    sig.loading.mtx.df |> 
+      reframe(across(where(is.numeric), var), .by = sample) |>
+      mutate(cohort = plyr::mapvalues(sample, 
+                                      from = sig.loading.mtx.metadata.df$sample, 
+                                      to = sig.loading.mtx.metadata.df$cohort,
+                                      warn_missing = FALSE))
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.var.list) <- conditions
+
+
+sig.loading.var.dis <- Reduce(cbind, lapply(sig.loading.var.list[["collapsed"]], 
+                                            function(df) {df |> summarise(across(where(is.numeric), median))})) |>
+  as.matrix() |>
+  t() |>
+  set_colnames("Median of within sample var. - Discovery") |>
+  as.data.frame()
+sig.loading.var.val <- Reduce(cbind, lapply(sig.loading.var.list[["collapsed-scored-validation"]], 
+                                            function(df) {df |> summarise(across(where(is.numeric), median))})) |>
+  as.matrix() |>
+  t() |>
+  set_colnames("Median of within sample var. - Validation") |>
+  as.data.frame()
+
+sig.loading.var <- cbind(sig.loading.var.dis, sig.loading.var.val)
+
+sig.loading.var.mtx.dis <- Reduce(function(d1, d2) full_join(d1, d2, by = c("cohort", "sample")), sig.loading.var.list[["collapsed"]]) |>
+  select(where(is.numeric))
+sig.loading.var.mtx.val <- Reduce(function(d1, d2) full_join(d1, d2, by = c("cohort", "sample")), sig.loading.var.list[["collapsed-scored-validation"]]) |>
+  select(where(is.numeric))
+
+sig.loading.var.mtx.list <- list(
+  collapsed = sig.loading.var.mtx.dis,
+  `collapsed-scored-validation` = sig.loading.var.mtx.val
+)
+```
+
+## get sample means/medians
+```{r}
+sig.loading.mean.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.mtx.df <- sig.loading.mtx.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    sig.loading.mtx.df |> 
+      reframe(across(where(is.numeric), mean), .by = sample) |>
+      mutate(cohort = plyr::mapvalues(sample, 
+                                      from = sig.loading.mtx.metadata.df$sample, 
+                                      to = sig.loading.mtx.metadata.df$cohort,
+                                      warn_missing = FALSE))
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.mean.list) <- conditions
+
+sig.loading.median.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.mtx.df <- sig.loading.mtx.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    sig.loading.mtx.df |> 
+      reframe(across(where(is.numeric), median), .by = sample) |>
+      mutate(cohort = plyr::mapvalues(sample, 
+                                      from = sig.loading.mtx.metadata.df$sample, 
+                                      to = sig.loading.mtx.metadata.df$cohort,
+                                      warn_missing = FALSE))
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.median.list) <- conditions
+```
+
+## get variance of sample means/medians
+```{r}
+sig.loading.mean.var.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.mean.df <- sig.loading.mean.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    sig.loading.mean.df |> 
+      reframe(across(where(is.numeric), var))
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.mean.var.list) <- conditions
+
+sig.loading.median.var.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.median.df <- sig.loading.median.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    sig.loading.median.df |> 
+      reframe(across(where(is.numeric), var))
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.median.var.list) <- conditions
+
+sig.loading.var <- sig.loading.var |>
+  mutate(#`Var. of sample means` = unlist(sig.loading.mean.var.list),
+         `Var. of sample medians - Discovery` = unlist(sig.loading.median.var.list[["collapsed"]]),
+         `Var. of sample medians - Validation` = unlist(sig.loading.median.var.list[["collapsed-scored-validation"]]))
+```
+
+## get between sample variances?
+```{r}
+sig.loading.ncell.list <- lapply(conditions, function(condition) {
+  the.list <- lapply(celltypes, function(ct) {
+    sig.loading.mtx.df <- sig.loading.mtx.list[[condition]][[ct]]
+    sig.loading.mtx.metadata.df <- sig.loading.mtx.metadata.list[[condition]][[ct]]
+    sig.loading.mtx.df |> 
+      select(!where(is.numeric), -cell_id) |>
+      add_count(sample) |>
+      distinct()
+  })
+  names(the.list) <- celltypes
+  the.list
+})
+names(sig.loading.ncell.list) <- conditions
+```
+
+## fill missing samples in some cell types with NA
+```{r}
+sig.loading.mtx.df.list <- list(
+  collapsed = Reduce(function(d1, d2) full_join(d1, d2, by = c("cohort", "sample")), sig.loading.median.list[["collapsed"]]),
+  `collapsed-scored-validation` = Reduce(function(d1, d2) full_join(d1, d2, by = c("cohort", "sample")), sig.loading.median.list[["collapsed-scored-validation"]])
+)
+```
+
+# draw heatmaps
+```{r}
+# load signature interpretation
+sig.interpt <- readxl::read_xlsx("../../PDAC_TME_on_cluster/resources/cell-type-signature/signature-analysis/signature_interpretation.xlsx")
+```
+
+```{r}
+# set colors for cohorts
+cohorts.dis <- sig.loading.mtx.metadata.list$collapsed$`CD8-positive, alpha-beta T cell`$cohort |> unique()
+cohorts.dis <- c("Chan", "Peng", "Steele", "Werba")
+cohorts.val <- sig.loading.mtx.metadata.list$`collapsed-scored-validation`$`CD8-positive, alpha-beta T cell`$cohort |> unique()
+cohorts.val <- c("Chen", "Lee", "Lin", "Zhou")
+
+cohorts <- c(cohorts.dis, cohorts.val)
+
+cohort.pal <- pal_npg("nrc")(length(cohorts))
+names(cohort.pal) <- cohorts
+```
+
+```{r}
+# signatures to remove
+ambient.sigs <- c("pancreatic epithelial cell Sig 5", "pancreatic epithelial cell Sig 13", 
+                  "fibroblast Sig 3", 
+                  "macrophage Sig 2", "macrophage Sig 4", 
+                  "CD4-positive, alpha-beta T cell Sig 4", 
+                  "myeloid dendritic cell Sig 9")
+```
+
+```{r}
+sig.loading.var.to.plot <- sig.loading.var[!(rownames(sig.loading.var) %in% ambient.sigs),]
+
+sig.split <- str_split(rownames(sig.loading.var.to.plot), " Sig ", simplify = TRUE)[,1]
+unique(sig.split)
+sig.split <- plyr::mapvalues(sig.split,
+                             from = c("CD8-positive, alpha-beta T cell", "CD4-positive, alpha-beta T cell", "blood vessel endothelial cell",
+                                      "pancreatic epithelial cell", "fibroblast", "myeloid dendritic cell", "macrophage"),
+                             to = c("CD8 T/NK cell", "CD4 T cell", "Endothelial cell", "Epithelial cell", "Fibroblast", "mDC", "Monocyte/Macrophage"))
+```
+
+```{r}
+names(sig.loading.var.to.plot) <- c("Intra-patient heterogeneity \n Discovery",
+                                    "Intra-patient heterogeneity \n Validation",
+                                    #"Inter-patient heterogeneity (mean)",
+                                    "Inter-patient heterogeneity \n Discovery",
+                                    "Inter-patient heterogeneity \n Validation")
+```
+
+```{r}
+rescale_1_99 <- function(x) {
+  (x - quantile(x, probs = c(0.01), na.rm = TRUE)) / 
+    (quantile(x, probs = c(0.99), na.rm = TRUE) - quantile(x, probs = c(0.01), na.rm = TRUE))
+}
+
+mtx.to.plot.dis <- sig.loading.mtx.df.list[["collapsed"]] |> 
+  select(-all_of(ambient.sigs)) |>
+  reframe(across(where(is.numeric), rescale)) |> as.matrix()
+mtx.to.plot.val <- sig.loading.mtx.df.list[["collapsed-scored-validation"]] |> 
+  select(-all_of(ambient.sigs)) |>
+  reframe(across(where(is.numeric), rescale)) |> as.matrix()
+
+#colnames(mtx.to.plot.dis) <- paste0(sig.split, " Sig ", str_split(colnames(mtx.to.plot.dis), " Sig ", simplify = TRUE)[,2])
+#colnames(mtx.to.plot.val) <- paste0(sig.split, " Sig ", str_split(colnames(mtx.to.plot.val), " Sig ", simplify = TRUE)[,2])
+
+colnames(mtx.to.plot.dis) <- plyr::mapvalues(gsub(" Sig ", " ", colnames(mtx.to.plot.dis)),
+                                             from = sig.interpt$signature,
+                                             to = sig.interpt$`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`)
+colnames(mtx.to.plot.val) <- plyr::mapvalues(gsub(" Sig ", " ", colnames(mtx.to.plot.val)),
+                                             from = sig.interpt$signature,
+                                             to = sig.interpt$`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`)
+```
+
+```{r}
+ht.dis <- Heatmap(mtx.to.plot.dis,
+                  height = nrow(mtx.to.plot.dis)*unit(0.08, "in"),
+                  left_annotation = rowAnnotation(Cohort = sig.loading.mtx.df.list[["collapsed"]]$cohort,
+                                                  col = list(Cohort = cohort.pal),
+                                                  show_annotation_name = FALSE),
+                  top_annotation = columnAnnotation(df = sig.loading.var.to.plot |> select(contains("Discovery")),
+                                                    # `Patient loading variance` = anno_boxplot(sig.loading.var.mtx, outline = FALSE, 
+                                                    #                                           gp = gpar(fill = "white")),
+                                                    # `Patient loading means` = anno_boxplot(mtx.to.plot, outline = FALSE, 
+                                                    #                                        gp = gpar(fill = "white"))
+                                                    show_annotation_name = FALSE),
+                  column_split = sig.split,
+                  column_title_gp = gpar(fontsize = 15, fontface = "bold"),
+                  column_names_rot = 75,
+                  name = "Signature loading",
+                  col = viridisLite::viridis(100, option = "C"))
+
+ht.val <- Heatmap(mtx.to.plot.val,
+                  height = nrow(mtx.to.plot.val)*unit(0.08, "in"),
+                  left_annotation = rowAnnotation(Cohort = sig.loading.mtx.df.list[["collapsed-scored-validation"]]$cohort,
+                                                  col = list(Cohort = cohort.pal),
+                                                  show_annotation_name = FALSE),
+                  top_annotation = columnAnnotation(df = sig.loading.var.to.plot |> select(contains("Validation")),
+                                                    # `Patient loading variance` = anno_boxplot(sig.loading.var.mtx, outline = FALSE, 
+                                                    #                                           gp = gpar(fill = "white")),
+                                                    # `Patient loading means` = anno_boxplot(mtx.to.plot, outline = FALSE, 
+                                                    #                                        gp = gpar(fill = "white"))
+                                                    show_annotation_name = FALSE),
+                  column_split = sig.split,
+                  column_title_gp = gpar(fontsize = 15, fontface = "bold"),
+                  column_names_rot = 75,
+                  name = "Signature loading",
+                  col = viridisLite::viridis(100, option = "C"))
+```
+
+```{r}
+png("test-fig2.png", width = 22, height = 25, units = "in", res = 321)
+(ht.dis %v% ht.val) |> 
+  draw(
+       merge_legends = TRUE)
+dev.off()
+```
+
+# how does heterogeneity of signature loading correlate in discovery vs. validation?
+```{r}
+sig.loading.var.to.plot <- sig.loading.var.to.plot |>
+  rownames_to_column("signature") |>
+  pivot_longer(cols = contains("heterogeneity"), values_to = "heterogeneity", names_to = "measure") |>
+  separate_wider_delim(measure, " \n ", names = c("measure", "group")) |>
+  pivot_wider(names_from = "group", values_from = "heterogeneity") |>
+  mutate(celltype = str_split(signature, " Sig ", simplify = TRUE)[,1])
+
+sig.loading.var.to.plot$celltype <-
+  plyr::mapvalues(sig.loading.var.to.plot$celltype,
+                  from = c("CD8-positive, alpha-beta T cell", "CD4-positive, alpha-beta T cell", "blood vessel endothelial cell",
+                           "pancreatic epithelial cell", "fibroblast", "myeloid dendritic cell", "macrophage"),
+                  to = c("CD8 T/NK cell", "CD4 T cell", "Endothelial cell", "Epithelial cell", "Fibroblast", "mDC", "Monocyte/Macrophage"))
+
+write_csv(sig.loading.var.to.plot, "test-sig-hetero-agree.csv")
+```
+
+```{r}
+ggplot(sig.loading.var.to.plot, aes(x = Discovery, y = Validation, color = measure)) +
+  geom_point() + 
+  stat_cor(method = "spearman") +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ celltype, scales = "free", ncol = 4) +
+  scale_color_jco() +
+  theme_pubr() + 
+  guides(color = guide_legend(title = "Measure", override.aes = aes(label = "")))
+ggsave("test-sig-hetero-agree.png", device = "png", width = 12, height = 7, units = "in", dpi = "retina")
+
+ggscatter(sig.loading.var.to.plot, 
+          x = "Discovery", y = "Validation",
+          color = "measure", palette = "jco",
+          add = "reg.line"
+) +
+  facet_wrap(~ measure, scales = "free") +
+  stat_cor()
+```
+
+
+# how many sigs left after merging?
+```{r}
+patient.discovery.profiles.df <- read_tsv("../../PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/patient-signature-profiles/discovery/loading-mean/patient-full-signature-profiles-loading-mean-discovery.tsv")
+patient.validated.profiles.df <- read_tsv("../../PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/patient-signature-profiles/validated/loading-mean/patient-full-signature-profiles-loading-mean-validated.tsv")
+```
+
+```{r}
+sig.number.list <- list(
+  Discovery = patient.discovery.profiles.df,
+  Validated = patient.validated.profiles.df,
+  Collapsed = patient.profiles.df
+)
+
+sig.number.list <- lapply(sig.number.list, function(df) {
+  data.frame (signature = names(df)[3:length(df)]) |>
+    mutate(cell_type = gsub(" [0-9]$| Rep [0-9]$", "", signature)) |> 
+    mutate(cell_type = gsub(" [0-9][0-9]$| Rep [0-9][0-9]$", "" , cell_type)) |>
+    dplyr::count(cell_type)
+})
+
+sig.number.df <- left_join(sig.number.list$Discovery, sig.number.list$Validated, by = "cell_type", suffix = c("_Discovery", "_Validated"))
+sig.number.df <- left_join(sig.number.df, sig.number.list$Collapsed, by = "cell_type")
+names(sig.number.df) <- plyr::mapvalues(names(sig.number.df), from = c("n"), to = c("n_Merged"))
+
+sig.number.df <- sig.number.df |>
+  pivot_longer(starts_with("n_"), names_to = "Condition", values_to = "Number") |>
+  mutate(Condition = factor(gsub("n_", "", Condition), levels = c("Discovery", "Validated", "Merged")))
+
+sig.number.df <- sig.number.df |>
+  mutate(cell_type_to_show = plyr::mapvalues(cell_type,
+                                             from = c("CD8-positive, alpha-beta T cell", "CD4-positive, alpha-beta T cell", "blood vessel endothelial cell",
+                                                      "pancreatic epithelial cell", "fibroblast", "myeloid dendritic cell", "macrophage"),
+                                             to = c("CD8 T/NK cell", "CD4 T cell", "Endothelial cell", 
+                                                    "Epithelial cell", "Fibroblast", "mDC", "Monocyte/Macrophage")))
+```
+
+```{r}
+p.signum <- ggplot(sig.number.df, aes(x = cell_type_to_show, y = Number, fill = Condition)) +
+  geom_bar(stat = 'identity', position = "dodge") +
+  scale_fill_npg() +
+  #facet_wrap(~group) +
+  labs(#title = paste0('Number of signatures for each cell types'),
+    x = 'Cell type', 
+    y = 'Number of signatures') +
+  ggpubr::theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+ggsave("test-fig2-signum.png", width = 8, height = 5, units = "in", dpi = 321)
+p.signum
+```
+
+# top marker heatmaps for specific signatures
+```{r}
+gene.loading.df.list <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../../PDAC_TME_on_cluster/output/results/LIGER/signature-analysis/",
+                  ct, "/gene-loading-analysis/",
+                  ct, "-signature-top-gene-loading-collapsed.tsv"))
+})
+names(gene.loading.df.list) <- celltypes
+```
+
+```{r}
+genes.unwanted <- c("MALAT1", "XIST")
+
+gene.loading.df.list <- lapply(gene.loading.df.list, function(gene.loading.df) {
+  gene.loading.df %>%
+    distinct(gene, .keep_all = TRUE) %>%
+    filter(!(gene %in% genes.unwanted)) %>%
+    column_to_rownames("gene")
+})
+```
+
+```{r}
+top.gene.list <- lapply(gene.loading.df.list, function(gene.loading.df) {
+  lapply(gene.loading.df, function(sig) {
+    rownames(gene.loading.df)[sort(sig, index.return = TRUE, decreasing = TRUE)$ix[1:10]]
+  })
+})
+```
+
+```{r}
+gene.loading.top.gene.df.list <- lapply(celltypes, function(ct) {
+  gene.loading.df <- gene.loading.df.list[[ct]]
+  top.genes <- Reduce(union, top.gene.list[[ct]])
+  
+  as.matrix(gene.loading.df)[top.genes,]
+})
+names(gene.loading.top.gene.df.list) <- celltypes
+```
+
+## draw heatmaps
+```{r}
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`pancreatic epithelial cell` %>% t() %>% rescale() %>% t()
+
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.to.plot[Reduce(union,
+                                                                            list(
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 1`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 3`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 4`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 6`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 7`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 8`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 9`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 10`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 11`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 12`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 14`,
+                                                                           top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 15`)),
+                                                                     c(1, 3, 4, 6, 7, 8, 9, 10, 11, 12, 14, 15)]
+```
+
+```{r}
+ht.epi <- Heatmap(t(gene.loading.top.gene.df.to.plot),
+                  name = "Gene loading",
+                  width = nrow(gene.loading.top.gene.df.to.plot)*unit(0.15, "in"),
+                  # row_labels = str_split(plyr::mapvalues(gsub(" Rep ", " ", colnames(gene.loading.top.gene.df.to.plot)),
+                  #                              from = sig.interpt$signature,
+                  #                              to = sig.interpt$`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`),
+                  #                        " - ", simplify = TRUE)[,2],
+                  row_labels = c("Acinar cell", "General drug sensitivity", "Basal A / EMT", " Heatshock response", "Classical A/B", " Proliferation/SN38 sensitivity", "Ductal cell", "ZFAS1/P4HA1/EIF4A2", "Mitochondria metabolism", "Basal B - COL17A1", "Classical A", "Basal B - IL32"),
+                  row_names_side = "left",
+                  row_dend_side = "right",
+                  col = colorRamp2(seq(from = 0, to = 0.7, length.out = 100), viridisLite::viridis(100, option = "C")),
+                  show_heatmap_legend = TRUE)
+ht.epi %>% draw()
+```
+
+```{r}
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`CD8-positive, alpha-beta T cell` %>% t() %>% rescale() %>% t()
+
+gene.loading.top.gene.df.to.plot <- 
+  gene.loading.top.gene.df.to.plot[union(top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 2`,
+                                         top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 7`),
+                                   c(2, 7)]
+```
+
+```{r}
+ht.cd8 <- Heatmap(t(gene.loading.top.gene.df.to.plot),
+                  name = "Gene loading",
+                  width = nrow(gene.loading.top.gene.df.to.plot)*unit(0.3, "in"),
+                  # row_labels = plyr::mapvalues(gsub(" Rep ", " ", colnames(gene.loading.top.gene.df.to.plot)),
+                  #                              from = sig.interpt$signature,
+                  #                              to = sig.interpt$`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`),
+                  row_labels = c("Exhausted", "Dysfunctional"),
+                  row_names_side = "left",
+                  row_dend_side = "right",
+                  col = colorRamp2(seq(from = 0, to = 0.7, length.out = 100), viridisLite::viridis(100, option = "C")),
+                  show_heatmap_legend = TRUE)
+ht.cd8 %>% draw()
+```
+
+```{r}
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$fibroblast %>% t() %>% rescale() %>% t()
+
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.to.plot[Reduce(union, 
+                                                                            list(top.gene.list$fibroblast$`fibroblast Rep 4`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 2`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 6`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 7`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 8`)),
+                                                                     c(4, 2, 6, 7, 8)]
+```
+
+```{r}
+ht.fibro <- Heatmap(t(gene.loading.top.gene.df.to.plot),
+                    name = "Gene loading",
+                    width = nrow(gene.loading.top.gene.df.to.plot)*unit(0.2, "in"),
+                    # row_labels = plyr::mapvalues(gsub(" Rep ", " ", colnames(gene.loading.top.gene.df.to.plot)),
+                    #                            from = sig.interpt$signature,
+                    #                            to = sig.interpt$`intepretation (change interpretation to have main marker for the unclear sigs, and put the interpretation a sub interpretation)`),
+                    row_labels = c("iCAF 1 - LMNA", "iCAF 2 - C7", "myCAF? - VMP1", "apCAF - MHCII", "myCAF - TPM2"), 
+                    row_names_side = "left",
+                    row_dend_side = "right",
+                    col = colorRamp2(seq(from = 0, to = 0.7, length.out = 100), viridisLite::viridis(100, option = "C")),
+                    show_heatmap_legend = TRUE)
+ht.fibro %>% draw()
+```
+
+```{r}
+png("test-fig2-top-markers.png", width = 13, height = 10, units = "in", res = 321)
+ggarrange(as.grob(ht.epi), as.grob(ht.cd8), as.grob(ht.fibro),
+          ncol = 1)
+dev.off()
+```
+
+
+
+
+
+
+
+

@@ -1,0 +1,51 @@
+---
+title: "Download data from Synapse"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(synapser)
+})
+```
+
+```{r}
+# login to Synapse
+synLogin(email='chengxin.yu@mail.utoronto.ca', password='970326@dshjyu', rememberMe=TRUE)
+```
+
+```{r}
+synapse.ids <- read.delim("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/prototype/HTAN_scRNAseq_synapse_ids.txt")
+synapse.ids <- synapse.ids %>%
+  mutate(synapse.id = str_split(command_line, " ", simplify = T)[,3])
+```
+
+```{r}
+lapply(synapse.ids %>% pull(synapse.id), function(the.id) {
+  synGet(the.id, downloadLocation = "/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/prototype/HTAN/")
+})
+```
+
+```{r}
+synGet("syn51122332", downloadLocation = "/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/data/scrnaseq/HTAN/metadata/")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

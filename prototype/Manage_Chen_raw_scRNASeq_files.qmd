@@ -1,0 +1,39 @@
+---
+title: "Manage Chen raw scRNASeq files"
+format: html
+editor: visual
+---
+
+```{r}
+
+```
+
+```{r}
+file.names <- list.files("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/data/scrnaseq/Chen GSE212966_RAW/raw-data/")
+file.names
+```
+
+```{r}
+folder.names <- str_split(file.names, "_b|_g|_m", simplify = T)[,1]
+file.ext <- str_split(file.names, "_", simplify = T)[,3] %>% unique()
+```
+
+```{r}
+lapply(folder.names, function(folder.name) {
+  dir.create(paste0("../data/scrnaseq/Chen GSE212966_RAW/raw-data/", folder.name, "/outs/filtered_feature_bc_matrix/"), recursive = T, showWarnings = F)
+})
+```
+
+```{r}
+lapply(folder.names, function(folder.name) {
+  file.copy(from = paste0("../data/scrnaseq/Chen GSE212966_RAW/raw-data/", folder.name, "_", file.ext),
+            to = paste0("../data/scrnaseq/Chen GSE212966_RAW/raw-data/", folder.name, "/outs/filtered_feature_bc_matrix/", file.ext))
+})
+```
+
+```{r}
+sample.names <- unique(folder.names)
+df.sample.names <- data.frame(sample = sample.names,
+                              id = str_split(sample.names, "_", simplify = T)[,2])
+write_csv(df.sample.names, "../data/scrnaseq/Werba/metadata/samples.csv")
+```

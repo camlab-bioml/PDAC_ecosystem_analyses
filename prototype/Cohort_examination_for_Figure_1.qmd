@@ -1,0 +1,98 @@
+---
+title: "Cohort examination for Figure 1"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(scater)
+  library(scran)
+  library(singleCellTK)
+  library(BiocParallel)
+  library(sjstats)
+  library(dittoSeq)
+})
+```
+
+```{r}
+sce.validation <- readRDS("../../PDAC_TME_on_cluster/output/data/cohort-discovery-validation-grouping/cohort-examination/sce-prepared-and-sampled-validation.rds")
+```
+
+```{r}
+table(sce.validation$cohort)
+table(sce.validation$celltype)
+head(rownames(sce.validation))
+head(colnames(sce.validation))
+```
+
+```{r}
+cohorts.val <- unique(sce.validation$cohort)
+```
+
+```{r}
+lapply(cohorts.val, function(cohort) {
+  dittoDotPlot(sce.validation, assay = "seuratNormData",
+               cells.use = sce.validation$cohort == cohort, group.by = "celltype", 
+               vars = c("EPCAM", "KRT19", "CFTR", "PTPRC", "CD68", "SPP1"), swap.rownames = "Symbol",
+               min.percent = 0.1)
+})
+```
+
+```{r}
+cohort.markers <- findMarkers(sce.validation, groups = sce.validation$cohort, pval.type = "all", sorted = TRUE)
+```
+
+```{r}
+markers.zhou <- cohort.markers$Zhou@listData %>% as.data.frame()
+rownames(markers.zhou) <- cohort.markers$Zhou@rownames
+```
+
+```{r}
+markers.zhou <- markers.zhou |>
+  filter(FDR < 0.05, abs(summary.logFC) > 0.4)
+```
+
+```{r}
+EnhancedVolcano::EnhancedVolcano(markers.zhou, lab = str_split(rownames(markers.zhou), "_", simplify = T)[,2], 
+                                 x = "summary.logFC", y = "FDR",
+                                 FCcutoff = 0.5, pCutoff = 0.05,
+                                 title = "Zhou vs. all",
+                                 subtitle = "all cell types")
+ggsave("test-cohort.examination.png", device = "png", width = 7, height = 10, units = "in", dpi = "retina")
+```
+
+```{r}
+celltypes <- unique(sce.validation$celltype)
+```
+
+```{r}
+sce.validation$cohort <- ifelse(sce.validation$cohort == "Zhou", "Zhou", "Other")
+table(sce.validation$cohort)
+```
+
+```{r}
+markers.ht.list <- lapply(celltypes, function(ct) {
+  plotFindMarkerHeatmap(runFindMarker(sce.validation[,sce.validation$celltype == ct], method = "wilcox", cluster = "cohort", useAssay = "logcounts"),
+                        title = ct)
+})
+names(markers.ht.list) <- celltypes
+```
+
+```{r}
+lapply(names(markers.ht.list), function(ct) {
+  #draw(markers.ht.list[[ct]], column_title = ct)
+  ht <- markers.ht.list[[ct]]
+  ht@column_title <- ct
+  ht
+})
+```
+
+
+
+
+

@@ -1,0 +1,675 @@
+---
+title: "Ductal_inferCNV_analysis"
+format: html
+editor: visual
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(sjstats)
+  library(ggpubr)
+  library(ggsci)
+  library(stringr)
+  library(ComplexHeatmap)
+  library(infercnv)
+  library(Matrix)
+  library(here)
+  library(scales)
+  library(gridExtra)
+  library(bluster)
+})
+```
+
+# load tumour sce
+```{r}
+sce.tumor.subsampled <- readRDS("../../PDAC_TME_on_cluster/output/data/inferCNV/pancreatic epithelial cell/Peng/ref-NormTissue/scRNASeq-infercnv-prepared-sce-pancreatic epithelial cell-Peng-ref-NormTissue.rds")
+table(sce.tumor.subsampled$cell_type)
+sce.tumor.subsampled <- sce.tumor.subsampled[,sce.tumor.subsampled$cell_type == "Tumour_pancreatic epithelial cell"]
+ncol(sce.tumor.subsampled)
+```
+
+# load infercnv results
+```{r}
+samples <- list.files("../../PDAC_TME_on_cluster/output/results/inferCNV/pancreatic epithelial cell/Peng/ref-NormTissue/")
+#The infercnv_object has the following attributes, we are insterested in the processed expression data in "expr.data"
+infercnv_obj_list <- lapply(samples, function(sample) {
+  readRDS(paste0("../../PDAC_TME_on_cluster/output/results/inferCNV/pancreatic epithelial cell/Peng/ref-NormTissue/", sample, "/run.final.infercnv_obj"))
+})
+names(infercnv_obj_list) <- samples
+```
+
+# check what's in the infercnv object
+```{r}
+#The infercnv_object has the following attributes, we are insterested in the processed expression data in "expr.data"
+names(attributes(infercnv_obj_list$CRR034499))
+```
+
+# get tumour sample cell indices
+```{r}
+# Finding the indices of all non-reference cells
+all_tumour_indices_list <- lapply(infercnv_obj_list, function(infercnv_obj) {
+  all_indices <- infercnv_obj@observation_grouped_cell_indices
+  all_indices$Normal_Epithelial <- NULL
+  all_tumour_indices <- unlist(unname(all_indices))
+  all_tumour_indices
+})
+Reduce(sum, lapply(all_tumour_indices_list, length))
+```
+
+# get variance of smoothed expression of genes in tumour sample cells
+```{r}
+#Create dataframe with expression variance for each cell
+infer_cnv_frame_list <- lapply(samples, function(sample) {
+  infercnv_obj <- infercnv_obj_list[[sample]]
+  all_tumour_indices <- all_tumour_indices_list[[sample]]
+  infer_cnv_frame <- infercnv_obj@expr.data[,all_tumour_indices]
+  infer_cnv_frame
+})
+names(infer_cnv_frame_list) <- samples
+
+vars_df_list <- lapply(infer_cnv_frame_list, function(infer_cnv_frame) {
+  vars <-colVars(infer_cnv_frame)
+  vars_df <- data.frame(colnames(infer_cnv_frame), vars)
+  rownames(vars_df) <- vars_df$colnames.infer_cnv_frame.
+  vars_df$colnames.infer_cnv_frame. <- NULL
+  vars_df
+})
+
+sce.tumor.infercnv.list <- lapply(infer_cnv_frame_list, function(infer_cnv_frame) {
+  sce <- SingleCellExperiment(assays = SimpleList(logcounts = infer_cnv_frame))
+  sce$sample <- str_split(colnames(infer_cnv_frame), "-", simplify = T)[,1]
+  sce
+})
+
+genes.common <- Reduce(intersect, lapply(sce.tumor.infercnv.list, rownames))
+sce.tumor.infercnv.list <- lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  sce.tumor.infercnv[genes.common,]
+})
+
+sce.tumor.infercnv <- Reduce(cbind, sce.tumor.infercnv.list)
+#sce.tumor.infercnv <- logNormCounts(sce.tumor.infercnv)
+```
+
+# put expression variance into original tumour SCE
+```{r}
+# Taking those cells found in our orignial dataset so we can compare
+sce.tumor.results <- sce.tumor.subsampled[,Reduce(c, lapply(vars_df_list, rownames))]
+colData(sce.tumor.results)$infer_cnv_var <- Reduce(c, lapply(vars_df_list, function(vars_df) {vars_df$vars}))
+
+sce.tumor.results.list <- lapply(vars_df_list, function(vars_df) {
+  sce.tumor.results <- sce.tumor.subsampled[,rownames(vars_df)]
+  colData(sce.tumor.results)$infer_cnv_var <- vars_df$vars
+  sce.tumor.results
+})
+```
+
+# run dimensionality reduction
+```{r}
+sce.tumor.results <- scater::runPCA(sce.tumor.results)
+sce.tumor.results <- scater::runUMAP(sce.tumor.results)
+
+sce.tumor.infercnv <- scater::runPCA(sce.tumor.infercnv, subset_row = getTopHVGs(modelGeneVar(sce.tumor.infercnv), prop = 0.1))
+sce.tumor.infercnv <- scater::runUMAP(sce.tumor.infercnv)
+
+sce.tumor.infercnv.list <- lapply(sce.tumor.infercnv.list, function (sce.tumor.infercnv) {
+  sce.tumor.infercnv <- scater::runPCA(sce.tumor.infercnv, subset_row = getTopHVGs(modelGeneVar(sce.tumor.infercnv), prop = 0.1))
+  sce.tumor.infercnv <- scater::runUMAP(sce.tumor.infercnv)
+  sce.tumor.infercnv
+})
+
+sce.tumor.results.list <- lapply(sce.tumor.results.list, function (sce.tumor.results) {
+  sce.tumor.results <- scater::runPCA(sce.tumor.results)
+  sce.tumor.results <- scater::runUMAP(sce.tumor.results)
+  sce.tumor.results
+})
+```
+
+# plot expression variance
+```{r}
+lapply(sce.tumor.results.list, function (sce.tumor.results) {
+  p <- plotReducedDim(sce.tumor.results, "UMAP", colour_by="infer_cnv_var")
+  p <- p + scale_colour_continuous(name = "infer_cnv_var", type = "viridis", 
+                                   #limits=c(0, 0.002), 
+                                   oob=squish)
+  gridExtra::grid.arrange(
+    p,
+    plotReducedDim(sce.tumor.results, "UMAP", colour_by="sample"),
+    ncol=2
+  )
+})
+```
+
+# cluster cells
+```{r}
+sce.tumor.results.list <- lapply(sce.tumor.results.list, function (sce.tumor.results) {
+  nn.clusters <- clusterCells(sce.tumor.results, use.dimred="PCA", BLUSPARAM=NNGraphParam(k=40))
+  colLabels(sce.tumor.results) <- nn.clusters
+  gridExtra::grid.arrange(
+    plotReducedDim(sce.tumor.results,"UMAP", colour_by="label"),
+    plotReducedDim(sce.tumor.results, "UMAP", colour_by="sample"),
+    ncol=2
+  )
+  sce.tumor.results
+})
+```
+
+# compare expression variance in different clusters
+```{r}
+cluster_scores_list <- lapply(sce.tumor.results.list, function (sce.tumor.results) {
+  cluster_scores <- aggregate(colData(sce.tumor.results)$infer_cnv_var, list(colData(sce.tumor.results)$label), FUN=mean)
+  cluster_scores[order(cluster_scores$x),][1:10,"x", drop=FALSE]
+})
+
+lapply(sce.tumor.results.list, function(sce.tumor.results) {
+  ggplot(data = as.data.frame(colData(sce.tumor.results)) |> select(label, infer_cnv_var), aes(x = label, y = infer_cnv_var, color = label)) + 
+    geom_boxplot() +
+    scale_color_npg() +
+    geom_hline(yintercept = mean(colData(sce.tumor.results)$infer_cnv_var), linetype = 2) +
+    geom_pwc(aes(group = label), tip.length = 0, method = "t_test", label = "p.adj.format") +
+    #stat_compare_means() + 
+    theme_pubr()
+})
+```
+
+```{r}
+the.genes = c("KRT19", "CFTR")
+
+lapply(sce.tumor.results.list, function (sce.tumor) {
+  sce.tumor$greater_than_mean_infer_cnv_var <- sce.tumor$infer_cnv_var > mean(sce.tumor$infer_cnv_var)
+  plotExpression(
+    sce.tumor,
+    features = the.genes,
+    x = "greater_than_mean_infer_cnv_var",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "Clusters",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  )
+})
+```
+
+# load other infercnv results
+```{r}
+cnv.regions.list <- lapply(samples, function(sample) {
+  cnv.regions <- read.table(paste0("../../PDAC_TME_on_cluster/output/results/inferCNV/pancreatic epithelial cell/Peng/ref-NormTissue/", 
+                                   sample, 
+                                   "/HMM_CNV_predictions.HMMi6.leiden.hmm_mode-subclusters.Pnorm_0.5.pred_cnv_regions.dat"),
+                            header = T, sep = "\t")
+})
+names(cnv.regions.list) <- samples
+
+cnv.genes.list <- lapply(samples, function(sample) {
+  cnv.genes <- read.table(paste0("../../PDAC_TME_on_cluster/output/results/inferCNV/pancreatic epithelial cell/Peng/ref-NormTissue/", 
+                                   sample, 
+                                   "/HMM_CNV_predictions.HMMi6.leiden.hmm_mode-subclusters.Pnorm_0.5.pred_cnv_genes.dat"),
+                            header = T, sep = "\t")
+})
+names(cnv.genes.list) <- samples
+
+cell.groupings.list <- lapply(samples, function(sample) {
+  cell.groupings <- read.table(paste0("../../PDAC_TME_on_cluster/output/results/inferCNV/pancreatic epithelial cell/Peng/ref-NormTissue/", 
+                                   sample, 
+                                   "/17_HMM_predHMMi6.leiden.hmm_mode-subclusters.cell_groupings"),
+                            header = T, sep = "\t")
+})
+names(cell.groupings.list) <- samples
+
+```
+
+```{r}
+sce.tumor.results.list <- lapply(sce.tumor.results.list, function(sce.tumor.results) {
+  cell.groupings <- cell.groupings.list[[(sce.tumor.results$sample)[1]]]
+  sce.tumor.results$cell_groupings <- plyr::mapvalues(colnames(sce.tumor.results),
+                                                      from = cell.groupings$cell,
+                                                      to = cell.groupings$cell_group_name,
+                                                      warn_missing = F)
+  sce.tumor.results
+})
+```
+
+```{r}
+table(sce.tumor.results.list$CRR034499$cell_groupings)
+```
+
+# cluster cells using infercnv smoothed expression
+```{r}
+sce.tumor.infercnv.list <- lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  sce.tumor.results <- sce.tumor.results.list[[(sce.tumor.infercnv$sample)[1]]]
+  
+  colData(sce.tumor.infercnv) <- colData(sce.tumor.results)
+  
+  nn.clusters <- clusterCells(sce.tumor.infercnv, use.dimred="PCA", BLUSPARAM=NNGraphParam(k=40))
+  colLabels(sce.tumor.infercnv) <- nn.clusters
+  sce.tumor.infercnv
+})
+
+
+lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  p0 <- ggplot(data = as.data.frame(colData(sce.tumor.infercnv)) |> select(label, infer_cnv_var), aes(x = label, y = infer_cnv_var, color = label)) + 
+    geom_boxplot() +
+    scale_y_log10() +
+    #scale_color_npg() +
+    geom_hline(yintercept = mean(colData(sce.tumor.infercnv)$infer_cnv_var), linetype = 2) +
+    #geom_pwc(aes(group = label), tip.length = 0, method = "t_test", label = "p.adj.format") +
+    #stat_compare_means() + 
+    theme_pubr()
+  
+  p <- plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="infer_cnv_var")
+  p <- p + scale_colour_continuous(name = "infer_cnv_var", type = "viridis", 
+                                   limits=c(0, 0.002), 
+                                   oob=squish)
+  gridExtra::grid.arrange(
+    p0,
+    p,
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="label"),
+    ncol=3
+  )
+})
+```
+
+# plot KRT19 and CFTR expression 
+```{r}
+the.genes = c("KRT19", "CFTR")
+
+lapply(sce.tumor.infercnv.list, function (sce.tumor) {
+  sce.tumor$greater_than_mean_infer_cnv_var <- sce.tumor$infer_cnv_var > mean(sce.tumor$infer_cnv_var)
+  plotExpression(
+    sce.tumor,
+    features = the.genes,
+    x = "greater_than_mean_infer_cnv_var",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "Clusters",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  )
+})
+```
+
+# get CNV state variance in each cell based on regional CNV states
+```{r}
+cnv.regions.var.list <- lapply(cnv.regions.list, function(cnv.regions) {
+  cnv.regions.var <- cnv.regions %>%
+    group_by(cell_group_name) %>%
+    summarise(state_variance = var(state, na.rm = T)) %>%
+    ungroup()
+  cnv.regions.var
+})
+
+sce.tumor.infercnv.list <- lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  sce.tumor.infercnv$cnv_state_var <- plyr::mapvalues(sce.tumor.infercnv$cell_groupings,
+                                                      from = cnv.regions.var.list[[(sce.tumor.infercnv$sample)[1]]]$cell_group_name,
+                                                      to = cnv.regions.var.list[[(sce.tumor.infercnv$sample)[1]]]$state_variance) %>% as.numeric()
+  sce.tumor.infercnv
+})
+
+
+saveRDS(sce.tumor.infercnv.list, file = "infercnv-smoothed-expression-epithelial-peng-24-samples.rds")
+```
+
+# plots to help setting decision threshold
+```{r}
+pdf("test-malignancy-classifier-peng.pdf", width = 15, height = 15, bg = "white")
+lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  sce.tumor <- sce.tumor.results.list[[(sce.tumor.infercnv$sample)[1]]]
+  sce.tumor$label <- sce.tumor.infercnv$label
+  sce.tumor$cnv_state_var <- sce.tumor.infercnv$cnv_state_var
+  sce.tumor$greater_than_mean_infer_cnv_var <- sce.tumor$infer_cnv_var > mean(sce.tumor$infer_cnv_var, na.rm = T)
+  sce.tumor$greater_than_mean_cnv_state_var <- sce.tumor$cnv_state_var > mean(sce.tumor$cnv_state_var, na.rm = T)
+  sce.tumor$greater_than_1_cnv_state_var <- sce.tumor$cnv_state_var > 1
+  
+  p33 <- plotExpression(
+    sce.tumor,
+    features = the.genes,
+    x = "label",
+    exprs_values = "logcounts",
+    colour_by = "cnv_state_var",
+    xlab = "Clusters",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  )
+  
+  p00 <- plotExpression(
+    sce.tumor,
+    features = the.genes,
+    x = "greater_than_mean_infer_cnv_var",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "greater_than_mean_infer_cnv_var",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  )
+  
+  p11 <- plotExpression(
+    sce.tumor,
+    features = the.genes,
+    x = "greater_than_mean_cnv_state_var",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "greater_than_mean_cnv_state_var",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  )
+  
+  p22 <- plotExpression(
+    sce.tumor,
+    features = the.genes,
+    x = "greater_than_1_cnv_state_var",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "greater_than_1_cnv_state_var",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  )
+  
+  p1 <- ggplot(data = as.data.frame(colData(sce.tumor.infercnv)) |> select(label, cnv_state_var), aes(x = label, y = cnv_state_var, color = label)) + 
+    geom_boxplot() +
+    #scale_color_npg() +
+    geom_hline(yintercept = mean(colData(sce.tumor.infercnv)$cnv_state_var, na.rm = T), linetype = 2) +
+    geom_pwc(aes(group = label), tip.length = 0, method = "t_test", label = "p.adj.format") +
+    #stat_compare_means() + 
+    labs(title = (sce.tumor.infercnv$sample)[1]) +
+    theme_pubr()
+  
+  p0 <- ggplot(data = as.data.frame(colData(sce.tumor.infercnv)) |> select(label, infer_cnv_var), aes(x = label, y = infer_cnv_var, color = label)) + 
+    geom_boxplot() +
+    #scale_color_npg() +
+    geom_hline(yintercept = mean(colData(sce.tumor.infercnv)$infer_cnv_var, na.rm = T), linetype = 2) +
+    geom_pwc(aes(group = label), tip.length = 0, method = "t_test", label = "p.adj.format") +
+    #stat_compare_means() + 
+    labs(title = (sce.tumor.infercnv$sample)[1]) +
+    theme_pubr()
+  
+  p111 <- plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="cnv_state_var")
+  p111 <- p111 + scale_colour_continuous(name = "cnv_state_var", type = "viridis", 
+                                         #limits=c(0, 0.002), 
+                                         oob=squish)
+  
+  p000 <- plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="infer_cnv_var")
+  p000 <- p000 + scale_colour_continuous(name = "infer_cnv_var", type = "viridis", 
+                                         #limits=c(0, 0.002), 
+                                         oob=squish)
+ tryCatch({
+   gridExtra::grid.arrange(
+    p000,
+    p00,
+    p0,
+    p111,
+    p11,
+    p1,
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="label"),
+    p22,
+    p33,
+    ncol=3
+  )
+ }, error = function(e) {
+   gridExtra::grid.arrange(
+    p000,
+    p00,
+    p0,
+    p111,
+    p11,
+    p1,
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by="label"),
+    p33,
+    ncol=3
+  )
+ })
+})
+dev.off()
+```
+
+# label cells as malignant/normal
+```{r}
+cnv.state.var.thres <- 0.92
+
+sce.tumor.infercnv.list <- lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  cluster.mean.cnv.state.var <- data.frame(label = sce.tumor.infercnv$label,
+                                           cnv.state.var = sce.tumor.infercnv$cnv_state_var)
+  cluster.mean.cnv.state.var <- cluster.mean.cnv.state.var %>%
+    group_by(label) %>%
+    summarise(mean.cnv.state.var = mean(cnv.state.var, na.rm = T)) %>%
+    ungroup()
+  
+  print(cluster.mean.cnv.state.var)
+  
+  cluster.mean.cnv.state.var$cell_type <- ifelse(cluster.mean.cnv.state.var$mean.cnv.state.var > cnv.state.var.thres, 
+                                                 "epithelial malignant", "epithelial normal")
+  
+  sce.tumor.infercnv$cell_type <- plyr::mapvalues(sce.tumor.infercnv$label,
+                                                  from = cluster.mean.cnv.state.var$label,
+                                                  to = cluster.mean.cnv.state.var$cell_type)
+  
+  sce.tumor.infercnv$cell_type_cell_by_cell <- ifelse(sce.tumor.infercnv$cnv_state_var > cnv.state.var.thres, 
+                                                      "epithelial malignant", "epithelial normal")
+  
+  sce.tumor.infercnv
+})
+```
+
+```{r}
+pdf("test-malignancy-classifier-label-peng.pdf", width = 10, height = 7, bg = "white")
+lapply(sce.tumor.results.list, function(sce.tumor.results) {
+  sce.tumor.results$cell_type <- sce.tumor.infercnv.list[[(sce.tumor.results$sample)[1]]]$cell_type
+  sce.tumor.results$cell_type_cell_by_cell <- sce.tumor.infercnv.list[[(sce.tumor.results$sample)[1]]]$cell_type_cell_by_cell
+  sce.tumor.results$label <- sce.tumor.infercnv.list[[(sce.tumor.results$sample)[1]]]$label
+  p1 <- plotExpression(
+    sce.tumor.results,
+    features = the.genes,
+    x = "cell_type",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "cell_type",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  ) + labs(title = (sce.tumor.results$sample)[1])
+  p2 <- plotExpression(
+    sce.tumor.results,
+    features = the.genes,
+    x = "cell_type_cell_by_cell",
+    exprs_values = "logcounts",
+    colour_by = "label",
+    xlab = "cell_type by thresholding per cell",
+    one_facet = TRUE,
+    ncol = 1,
+    scales = "free"
+  ) + labs(title = (sce.tumor.results$sample)[1])
+  
+  gridExtra::grid.arrange(
+    p1,
+    p2,
+    ncol = 2
+  )
+})
+dev.off()
+```
+
+```{r}
+labels <- lapply(sce.tumor.infercnv.list, function(sce.tumor.infercnv) {
+  data.frame(cell_id = colnames(sce.tumor.infercnv),
+             label = sce.tumor.infercnv$cell_type)
+})
+labels <- Reduce(rbind, labels)
+write_csv(labels, "Peng-24-sample-epithelial-labels-for-Michael.csv")
+```
+
+```{r}
+holder <- sce.tumor.results.list$`85948`
+reducedDim(holder, "UMAP") <- reducedDim(sce.tumor.infercnv.list$`85948`, "UMAP")
+holder$label <- sce.tumor.infercnv.list$`85948`$label
+plotReducedDim(holder, dimred = "UMAP", colour_by = "KRT19")
+plotReducedDim(holder, dimred = "UMAP", colour_by = "CFTR")
+plotReducedDim(holder, dimred = "UMAP", colour_by = "label")
+```
+
+```{r}
+png("test21.png", width = 20, height = 7, units = "in", res = 321)
+gridExtra::grid.arrange(
+    plotReducedDim(sce.tumor.infercnv,"UMAP", colour_by = "label"),
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by = "cnv_state_var"),
+    plotReducedDim(sce.tumor.infercnv, "UMAP", colour_by = "infer_cnv_var"),
+    ncol=3
+)
+dev.off()
+```
+
+```{r}
+recluster.state.var.median <- data.frame(label = as.character(sce.tumor.infercnv$label),
+                                         state.var = as.numeric(sce.tumor.infercnv$cnv_state_var))
+
+recluster.state.var.median <- recluster.state.var.median %>%
+  group_by(label) %>%
+  summarise(state_var_median = median(state.var, na.rm = T)) %>%
+  ungroup()
+```
+
+```{r}
+hmm.output <- logcounts(sce.tumor.infercnv) %>% t() %>% as.data.frame()
+
+hmm.output$label <- sce.tumor.infercnv$label
+
+hmm.output <- hmm.output %>%
+  group_by(label) %>%
+  summarise(across(everything(), mean)) %>%
+  ungroup()
+
+holder <- hmm.output$label
+hmm.output$label <- NULL
+rownames(hmm.output) <- holder
+hmm.output <- as.matrix(hmm.output)
+rm(holder)
+
+hmm.output <- hmm.output[,!(colSums(hmm.output) == 0)]
+```
+
+```{r}
+png("test22.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output)
+dev.off()
+```
+
+```{r}
+intersect(cnv.genes$gene, colnames(hmm.output)) %>% length()
+
+cnv.genes.common<- cnv.genes[cnv.genes$gene %in% colnames(hmm.output),] %>%
+  select(gene, chr, start, end) %>%
+  distinct()
+
+cnv.genes.common$chr <- str_split(cnv.genes.common$chr, "chr", simplify = T)[,2]
+cnv.genes.common$chr <- factor(cnv.genes.common$chr, levels = seq(length(unique(cnv.genes.common$chr))))
+cnv.genes.common <- cnv.genes.common %>%
+  arrange(chr, start, end)
+
+hmm.output <- hmm.output[,cnv.genes.common$gene]
+```
+
+```{r}
+annot <- cnv.genes.common %>% select(chr)
+#annot$chr <- factor(annot$chr, levels = seq(length(unique(annot$chr))))
+rownames(annot) <- cnv.genes.common$gene
+head(colnames(hmm.output))
+head(rownames(annot))
+
+png("test24.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output, 
+         cluster_rows = T, 
+         cluster_cols = F,
+         annotation_col = annot,
+         main = "mean smoothed expression",
+         name = "cluster mean exprs.")
+dev.off()
+```
+
+```{r}
+summary(colVars(hmm.output))
+
+hmm.output <- hmm.output[,(colVars(hmm.output) > 0.0000881906)]
+```
+
+```{r}
+png("test23.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output)
+dev.off()
+```
+
+```{r}
+intersect(cnv.genes$gene, colnames(hmm.output)) %>% length()
+
+cnv.genes.common<- cnv.genes[cnv.genes$gene %in% colnames(hmm.output),] %>%
+  select(gene, chr, start, end) %>%
+  distinct()
+
+cnv.genes.common$chr <- str_split(cnv.genes.common$chr, "chr", simplify = T)[,2]
+cnv.genes.common$chr <- factor(cnv.genes.common$chr, levels = seq(length(unique(cnv.genes.common$chr))))
+cnv.genes.common <- cnv.genes.common %>%
+  arrange(chr, start, end)
+
+hmm.output <- hmm.output[,cnv.genes.common$gene]
+```
+
+```{r}
+annot <- cnv.genes.common %>% select(chr)
+#annot$chr <- factor(annot$chr, levels = seq(length(unique(annot$chr))))
+rownames(annot) <- cnv.genes.common$gene
+head(colnames(hmm.output))
+head(rownames(annot))
+
+png("test25.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output, 
+         cluster_rows = T, 
+         cluster_cols = F,
+         annotation_col = annot,
+         main = "mean smoothed expression")
+dev.off()
+```
+
+```{r}
+summary(colVars(hmm.output))
+
+hmm.output <- hmm.output[,(colVars(hmm.output) > 0.0005501)]
+```
+
+```{r}
+intersect(cnv.genes$gene, colnames(hmm.output)) %>% length()
+
+cnv.genes.common<- cnv.genes[cnv.genes$gene %in% colnames(hmm.output),] %>%
+  select(gene, chr, start, end) %>%
+  distinct()
+
+cnv.genes.common$chr <- str_split(cnv.genes.common$chr, "chr", simplify = T)[,2]
+cnv.genes.common$chr <- factor(cnv.genes.common$chr, levels = seq(length(unique(cnv.genes.common$chr))))
+cnv.genes.common <- cnv.genes.common %>%
+  arrange(chr, start, end)
+
+hmm.output <- hmm.output[,cnv.genes.common$gene]
+```
+
+```{r}
+annot <- cnv.genes.common %>% select(chr)
+#annot$chr <- factor(annot$chr, levels = seq(length(unique(annot$chr))))
+rownames(annot) <- cnv.genes.common$gene
+head(colnames(hmm.output))
+head(rownames(annot))
+
+png("test26.png", width = 20, height = 7, units = "in", res = 321)
+pheatmap(hmm.output, 
+         cluster_rows = T, 
+         cluster_cols = F,
+         annotation_col = annot,
+         main = "mean smoothed expression")
+dev.off()
+```
+
+
+
+

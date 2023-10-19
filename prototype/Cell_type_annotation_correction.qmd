@@ -1,0 +1,170 @@
+---
+title: "Cell type annotation correction"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(singleCellTK)
+  library(BiocParallel)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(patchwork)
+  library(ggalluvial)
+})
+```
+
+```{r}
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto")
+```
+
+```{r}
+mesenchymal.cell.type.labels.all <- read_tsv("../resources/cell-type-assignment/from_Sibly/mesenchymal_cluster_names.tsv")
+names(mesenchymal.cell.type.labels.all) <- c("cell_id", "label")
+```
+
+```{r}
+sce.list <- lapply(cohorts, function(cohort) {
+  sce <- readRDS(paste0("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-", cohort, ".rds"))
+  sce[,intersect(mesenchymal.cell.type.labels.all$cell_id, colnames(sce))]
+})
+names(sce.list) <- cohorts
+lapply(sce.list, ncol)
+```
+
+```{r}
+coldata <- Reduce(rbind, lapply(sce.list, colData)) %>% as.data.frame()
+coldata$cell_id <- rownames(coldata)
+coldata <- coldata %>% select(-detected.1, -sum.1, -total.1)
+```
+
+```{r}
+coldata <- left_join(coldata, mesenchymal.cell.type.labels.all, by = "cell_id")
+```
+
+```{r}
+coldata.summary <- coldata %>%
+  group_by(cohort, sample, predicted.annotation.l1, label) %>%
+  summarise(Freq = n(), mean_Azimuth_score = mean(predicted.annotation.l1.score)) %>%
+  ungroup()
+```
+
+```{r}
+coldata.summary <- coldata.summary %>%
+  mutate(azimuth_schwann = predicted.annotation.l1 %in% c("schwann")) %>%
+  mutate(validated_schwann = (predicted.annotation.l1 == "schwann" & label == "Schwann"))
+```
+
+```{r}
+ggplot(data = coldata.summary,
+       aes(axis1 = cohort, axis2 = predicted.annotation.l1, axis3 = label,
+           y = Freq)) +
+  scale_x_discrete(limits = c("Cohort", "Azimuth label", "Manual label"), expand = c(.2, .05)) +
+  xlab("") +
+  geom_alluvium(aes(fill = cohort, alpha = mean_Azimuth_score)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_pubr() +
+  ggtitle("")
+ggsave("test.png", device = "png", width = 12, height = 8, units = "in", dpi = 321, bg = "white")
+```
+
+```{r}
+ggplot(coldata.summary %>% filter(azimuth_schwann),
+       aes(x = validated_schwann, y = mean_Azimuth_score)) + 
+  geom_boxplot(aes(color = cohort)) +
+  theme_pubr()
+```
+
+```{r}
+ggplot(coldata.summary %>% filter(predicted.annotation.l1 == "activated_stellate"),
+       aes(x = label, y = mean_Azimuth_score)) + 
+  geom_boxplot(aes(color = cohort)) +
+  labs(title = "Azimuth labeled activated_stellate cells") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+ggplot(coldata.summary %>% filter(predicted.annotation.l1 == "quiescent_stellate"),
+       aes(x = label, y = mean_Azimuth_score)) + 
+  geom_boxplot(aes(color = cohort)) +
+  labs(title = "Azimuth labeled quiescent_stellate cells") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+sce.list <- lapply(sce.list, function(sce) {
+  rownames(sce) <- paste(rowData(sce)[['Symbol']], rowData(sce)[['ensembl_id']], sep = "_")
+  sce
+})
+
+genes.common <- Reduce(intersect, lapply(sce.list, rownames))
+coldata.common <- Reduce(intersect, lapply(sce.list, function(sce) names(colData(sce))))
+redims.common <- Reduce(intersect, lapply(sce.list, reducedDimNames))
+```
+
+```{r}
+sce.list <- lapply(sce.list, function(sce) {
+  sce <- sce[genes.common,]
+  colData(sce) <- colData(sce)[,coldata.common]
+  reducedDims(sce) <- reducedDims(sce)[redims.common]
+  rowData(sce)$chr <- NULL
+  rowData(sce)$gene_start <- NULL
+  rowData(sce)$gene_end <- NULL
+  rowData(sce)$gene_strand <- NULL
+  sce
+})
+```
+
+```{r}
+sce <- Reduce(cbind, sce.list)
+sce$manual_label <- plyr::mapvalues(colnames(sce),
+                                    from = mesenchymal.cell.type.labels.all$cell_id,
+                                    to = mesenchymal.cell.type.labels.all$label)
+
+table(sce$sample)
+```
+
+```{r}
+sce <- runHarmony(
+  sce,
+  useAssay = "logcounts",
+  useReducedDim = NULL,
+  batch = "cohort",
+  reducedDimName = "HARMONY",
+  nComponents = 50,
+  lambda = 0.1,
+  theta = 5,
+  sigma = 0.01,
+  nIter = 10,
+  nclust = 50,
+  verbose = TRUE)
+```
+
+```{r}
+sce <- runSeuratNormalizeData(sce, useAssay = "counts")
+sce <- runSeuratFindHVG(sce, useAssay = "counts")
+sce <- setTopHVG(sce, method = "vst", featureSubsetName = "hvf")
+sce <- runSeuratScaleData(sce, useAssay = "seuratNormData")
+sce <- runSeuratPCA(sce, useAssay = "seuratScaledData")
+sce <- runSeuratFindClusters(sce, useAssay = "seuratScaledData")
+sce <- runSeuratUMAP(sce)
+```
+
+```{r}
+
+```
+
+

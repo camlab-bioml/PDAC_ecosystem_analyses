@@ -48,23 +48,128 @@ cmdstan_version()
 ```{r}
 stan.data <- readRDS("Stan/stanData.rds")
 
-nIter <- 100
-nWarmup <- 50
+nIter <- 10
+nWarmup <- 1
 nChains <- 1
 nCores <- getOption("mc.cores", 1)
 treeDepth <- 15
 ```
 
+```{r}
+names(stan.data) <- gsub(" ", "_", names(stan.data))
+names(stan.data) <- gsub("-", "_", names(stan.data))
+names(stan.data) <- gsub(",", "", names(stan.data))
+```
+
 # cmdstanr
+## write model
+```{r}
+celltypes <- gsub(" ", "_", celltypes)
+celltypes <- gsub("-", "_", celltypes)
+celltypes <- gsub(",", "", celltypes)
+
+paste0(
+"
+functions {
+  
+}
+
+data {
+  int<lower = 1> C;    // number of cell types
+  
+  int<lower = 1> L; // number of 'niches'
+  
+  int<lower = 1> P; // number of patients
+", 
+(paste0("
+  int<lower = 1> j_", celltypes, ";   // starting column index for ", celltypes, " cells 
+  int<lower = 1> N_", celltypes, ";   // number of ", celltypes, " cells 
+  int<lower = 1> P_", celltypes, ";   // number of ", celltypes, " patients
+  int<lower = 1> K_", celltypes, ";   // number of ", celltypes, " signatures
+  matrix[N_", celltypes, ", K_", celltypes, "] y_", celltypes, ";     // ", celltypes, " signature loading matrix
+  array[N_", celltypes, "] int<lower = 1, upper = P_", celltypes, "> x_", celltypes, ";    // patient id for ", celltypes, " single-cells
+") %>% str_flatten()), 
+"
+}
+
+transformed data {
+  int<lower = 1> K;
+  // int<lower = 1> P;
+  
+  K = 0", 
+(paste0(" + K_", celltypes
+) %>% str_flatten()), ";",
+(paste0("
+  // P = P_", celltypes[1], ";
+") %>% str_flatten()),
+"}
+
+parameters {
+  // intrinsic variance
+", 
+(paste0("  cov_matrix[K_", celltypes, "] cov_i_", celltypes, ";
+") %>% str_flatten()), 
+"
+  matrix<lower = 0> [P, K] theta;
+  matrix<lower = 0> [P, L] niche_loadings;
+  matrix<lower = 0> [L, K] niche_factors;
+}
+
+transformed parameters {
+  matrix[P,K] patient_specific_modelled_mu;
+  patient_specific_modelled_mu = niche_loadings * niche_factors;
+  
+  // patient specific means
+", 
+(paste0("
+  matrix<lower = 0>[P, K_", celltypes, "] mu_", celltypes, ";
+  mu_", celltypes, " = block(theta, 1, j_", celltypes, ", P, K_", celltypes, ");
+") %>% str_flatten()), 
+"  
+}
+
+model {
+  
+  // priors on intrinsic covariance matrices
+  ", 
+(paste0("target += inv_wishart_lpdf(cov_i_", celltypes, " | K_", celltypes, ", 0.01 + diag_matrix(rep_vector(1.0, K_", celltypes, ")));
+  ") %>% str_flatten()), 
+"
+  // priors on niche factors
+  for(l in 1:L) {
+    target += normal_lpdf(niche_factors[l] | 0, 10);
+  }
+  
+  for(p in 1:P) {
+    target += normal_lpdf(niche_loadings[p] | 0, 1);
+    target += normal_lpdf(theta[p] | patient_specific_modelled_mu[p], 1);
+  }
+", 
+(paste0("
+  for(n in 1:N_", celltypes, ") {
+    int patient_n = x_", celltypes, "[n];
+    target += multi_normal_lpdf(y_", celltypes, "[n] | mu_", celltypes, "[patient_n], cov_i_", celltypes, ");
+  }
+") %>% str_flatten()), 
+" 
+}
+
+generated quantities {
+
+} // The posterior predictive distribution
+"
+) %>% write_stan_file(dir = "Stan/model")
+```
+
 ## compile model (cmdstanr)
 ```{r}
-file <- file.path("Stan", "model", "test3.stan")
+file <- file.path("Stan", "model", "model_17d5fb3b8981a01fa25d4cf38d42c562.stan")
 model <- cmdstan_model(stan_file = file)
 ```
 
 ```{r}
-model$print()
 model$exe_file()
+model$print()
 ```
 
 ## MCMC 
@@ -83,13 +188,34 @@ fit.mcmc <- model$sample(
 
 ## Optimization
 ```{r}
+params.init.value.list <- lapply(celltypes, function(ct) {
+  cov(stan.data[[paste0("y_", ct)]], method = "pearson")
+})
+names(params.init.value.list) <- paste0("cov_i_", celltypes)
+
+# NMF is in conflict with DelayedArray because DelayedArray implemented a generic seed method as well
+saveRDS(df.sig.mean, "/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/prototype/Stan/df_sig_mean_for_stan.rds")
+
+nmf.niches <- NMF::nmf(x = as.matrix(df.sig.mean), rank = number.of.niches, method = "brunet", seed = NULL, model = NULL, nrun = 1, .options = 'p4tv')
+
+nmf.niches <- readRDS("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME/prototype/Stan/nmf_niches_for_stan.rds")
+
+params.init.value.list[["niche_loadings"]] <- nmf.niches@fit@W
+params.init.value.list[["niche_factors"]] <- nmf.niches@fit@H
+```
+
+```{r}
+nIter = 2000
+
 fit.optim <- model$optimize(
   data = stan.data,
-  seed = 719,
-  refresh = 5,
+  refresh = ceiling(nIter/20),
+  init = list(
+    params.init.value.list
+  ),
   algorithm = "lbfgs",
   tol_param = 1e-7,
-  iter = 50
+  iter = nIter
 )
 ```
 

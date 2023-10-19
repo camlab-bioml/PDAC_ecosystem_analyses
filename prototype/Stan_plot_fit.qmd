@@ -20,6 +20,9 @@ suppressPackageStartupMessages({
   library(jtools)
   library(cowplot)
   library(cmdstanr)
+  library(corrplot)
+  library(Hmisc)
+  library(PerformanceAnalytics)
 })
 ```
 
@@ -44,27 +47,113 @@ summary.fit <- summary(fit.stan)
 as_tibble(summary.fit$summary)
 ```
 
+# optimizer results
 ```{r}
-fit.optim$summary()
+#fit.optim$summary()
 
-holder <- fit.optim$draws(variables = "Y_mono", format = "matrix")
-holder <- matrix(holder, nrow = stan.data$N_mono)
+holder <- fit.optim$draws(variables = "patient_specific_modelled_mu", format = "matrix")
+holder <- matrix(holder, nrow = stan.data$P)
 
-holder1 <- fit.optim$draws(variables = "Y_act_ste", format = "matrix")
-holder1 <- matrix(holder1, nrow = stan.data$N_act_ste)
+holder1 <- fit.optim$draws(variables = "niche_factors", format = "matrix")
+holder1 <- matrix(holder1, nrow = stan.data$L)
 
-colnames(holder) <- paste("Mono", seq(1:ncol(holder)), sep = " ")
-colnames(holder1) <- paste("Activated_stellate", seq(1:ncol(holder1)), sep = " ")
+holder2 <- fit.optim$draws(variables = "niche_loadings", format = "matrix")
+holder2 <- matrix(holder2, nrow = stan.data$P)
 
-stan.data$y_mono <- holder
-stan.data$y_act_ste <- holder1
+lapply(celltypes, function(ct) paste(ct, seq(stan.data[[paste0("K_", ct)]]), sep = " ")) %>% unlist()
+
+colnames(holder) <- lapply(celltypes, function(ct) paste(ct, seq(stan.data[[paste0("K_", ct)]]), sep = " ")) %>% unlist()
+rownames(holder) <- paste("P", seq(nrow(holder)), sep = " ")
+colnames(holder1) <- lapply(celltypes, function(ct) paste(ct, seq(stan.data[[paste0("K_", ct)]]), sep = " ")) %>% unlist()
+rownames(holder1) <- paste("niche factor", seq(nrow(holder1)), sep = " ")
+colnames(holder2) <- paste("niche factor", seq(ncol(holder2)), sep = " ")
+rownames(holder2) <- paste("P", seq(nrow(holder2)), sep = " ")
 ```
 
 ```{r}
-Heatmap(scale(holder), cluster_columns = F, cluster_rows = F)
-Heatmap(scale(stan.data$y_mono), cluster_columns = F, cluster_rows = F)
+png("test4_val.png", width = 10, height = 10, units = "in", res = 321)
+pheatmap(holder, main = "patient_specific_modelled_mu")
+dev.off()
+
+png("test5_val.png", width = 10, height = 7, units = "in", res = 321)
+pheatmap(holder1, main = "Microenvironment Niche Factors")
+dev.off()
+
+png("test6_val.png", width = 7, height = 10, units = "in", res = 321)
+pheatmap(holder2, main = "niche loadings")
+dev.off()
+
 ```
 
+```{r}
+png("test7.png", width = 7, height = 10, units = "in", res = 321)
+pheatmap(nmf.niches@fit@W)
+dev.off()
+
+png("test7.png", width = 10, height = 7, units = "in", res = 321)
+pheatmap(nmf.niches@fit@H)
+dev.off()
+```
+
+```{r}
+celltype = "macrophage"
+
+holder3 <- fit.optim$draws(variables = paste0("cov_i_", celltype), format = "matrix")
+holder3 <- matrix(holder3, nrow = stan.data[[paste0("K_", celltype)]])
+
+holder4 <- fit.optim$draws(variables = paste0("mu_", celltype), format = "matrix")
+holder4 <- matrix(holder4, nrow = stan.data$P)
+
+holder2 <- fit.optim$draws(variables = "niche_loadings", format = "matrix")
+holder2 <- matrix(holder2, nrow = stan.data$P)
+
+lapply(celltypes, function(ct) paste(ct, seq(stan.data[[paste0("K_", ct)]]), sep = " ")) %>% unlist()
+
+colnames(holder3) <- paste(celltype, seq(stan.data[[paste0("K_", celltype)]]), sep = " ")
+rownames(holder3) <- paste(celltype, seq(stan.data[[paste0("K_", celltype)]]), sep = " ")
+colnames(holder4) <- paste(celltype, seq(stan.data[[paste0("K_", celltype)]]), sep = " ")
+rownames(holder4) <- samples.union
+colnames(holder2) <- paste("niche factor", seq(ncol(holder2)), sep = " ")
+rownames(holder2) <- paste("P", seq(nrow(holder2)), sep = " ")
+```
+
+```{r}
+Heatmap(holder3, col = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red")))
+pheatmap(holder4)
+```
+
+## load niche factor results
+```{r}
+niches.collapsed <- readRDS("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/stan/results/microenvironment-niche-factors-full-env-collapsed.rds")
+niches.collapsed.validation <- readRDS("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/stan/results/microenvironment-niche-factors-full-env-collapsed-scored-validation.rds")
+```
+
+```{r}
+rownames(niches.collapsed) <- paste("Discovery", rownames(niches.collapsed))
+rownames(niches.collapsed.validation) <- paste("Validation", rownames(niches.collapsed.validation))
+```
+
+```{r}
+niches <- cbind(t(niches.collapsed), t(niches.collapsed.validation))
+```
+
+```{r}
+corrplot(cor(niches))
+```
+
+```{r}
+png("test-stan.png", width = 12, height = 10, units = "in", res = 321)
+chart.Correlation(niches, histogram=TRUE, pch=19)
+dev.off()
+```
+
+## load cov_i results
+```{r}
+cov.i.collapsed <- readRDS("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/stan/results/intrinsic-covariance-matrices-full-env-collapsed-num-niches-4-niter-2000.rds")
+cov.i.collapsed.validation <- readRDS("/Users/kieranlab/Desktop/Snakemake_pipelines/PDAC_TME_on_cluster/output/results/LIGER/patient-analysis/stan/results/intrinsic-covariance-matrices-full-env-collapsed-scored-validation-num-niches-4-niter-2000.rds")
+```
+
+# back to MCMC results
 ```{r}
 summary.sigmaE <- summary(fit.stan, pars = c("sigmaE"))$summary
 summary.sigmaI <- summary(fit.stan, pars = c("sigmaI"))$summary

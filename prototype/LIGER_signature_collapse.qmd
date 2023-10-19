@@ -13,20 +13,74 @@ suppressPackageStartupMessages({
   library(sjstats)
   library(ggpubr)
   library(tidyr)
+  library(glmnet)
 })
 ```
 
+# validation cohort visualization and validation-validated signature mapping
+```{r}
+df.sigprofile.validation <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validation/loading-mean/patient-full-signature-profiles-loading-mean-validation.tsv")
+mtx.sigprofile.validation <- df.sigprofile.validation %>% select(-cohort, -sample) %>% as.matrix()
+
+celltypes <- str_split(colnames(mtx.sigprofile.validation), " ", simplify = T)[,1] %>% unique
+
+sig.dis.val.map <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", ct, "/signature-validation/", ct, "-validated-signatures.tsv"))
+})
+names(sig.dis.val.map) <- celltypes
+
+sig.dis.val.map <- Reduce(rbind, sig.dis.val.map)
+sig.dis.val.map <- sig.dis.val.map %>% select(discovery, validation.corr.1, validated.corr.sig)
+sig.dis.val.map$validation <- str_split(sig.dis.val.map$validation.corr.1, " ", simplify = T)[,2]
+sig.dis.val.map$validation.corr.1 <- NULL
+sig.dis.val.map$discovery <- str_split(sig.dis.val.map$discovery, " ", simplify = T)[,2]
+names(sig.dis.val.map) <- c("discovery.sig.num", "validated.sig.name", "validation.sig.num")
+sig.dis.val.map$validation.sig.name <- paste(str_split(sig.dis.val.map$validated.sig.name, " ", simplify = T)[,1],
+                                                     sig.dis.val.map$validation.sig.num)
+sig.dis.val.map$discovery.sig.name <- paste(str_split(sig.dis.val.map$validated.sig.name, " ", simplify = T)[,1],
+                                                     sig.dis.val.map$discovery.sig.num)
+sig.dis.val.map <- sig.dis.val.map %>% drop_na()
+
+holder <- data.frame(validation.sig.name = colnames(df.sigprofile.validation))
+holder <- holder %>% filter(validation.sig.name != "cohort" & validation.sig.name != "sample")
+
+sig.dis.val.map <- full_join(sig.dis.val.map, holder, by = "validation.sig.name")
+sig.dis.val.map <- sig.dis.val.map %>% arrange(factor(validation.sig.name, levels = holder$validation.sig.name))
+
+collapse_guide <- sig.dis.val.map %>% group_by(validation.sig.name) %>% mutate(validated_collapse = paste(validated.sig.name, collapse = " | "))
+collapse_guide <- collapse_guide %>% select(-discovery.sig.num, -validation.sig.num)
+```
+
+```{r}
+top_ha <- columnAnnotation(Validated.sig = collapse_guide %>% select(validated_collapse) %>% distinct() %>% pull(validated_collapse))
+
+png("test11.png", width = 18, height = 10, units = "in", res = 321)
+Heatmap(mtx.sigprofile.validation %>% scale(), 
+        name = "Norm sig-loading",
+        #left_annotation = row_ha, 
+        #row_split = sigprofile.df$cohort,
+        top_annotation = top_ha,
+        column_split = (df.sigprofile.validation %>% select(!c(cohort, sample)) %>% names() %>% str_split(., pattern = " ", simplify = T))[,1])
+dev.off()
+```
+
+```{r}
+write_tsv(collapse_guide, file = "dis-val-sig-mapping.tsv")
+```
+
+# colapsing validated signatures
+## choose one cell type
 ```{r}
 celltype <- "ductal"
 ```
 
-# load signatures
+## load signatures
 ```{r}
 gene_loading <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-gene-loading-validated.tsv"))
 sig_loading <- read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", celltype, "/loading-matrices/", celltype, "-signature-loading-validated.tsv"))
 ```
 
-# load collapse guide
+## load collapse guide
 ```{r}
 collapse_guide <- read_csv("../resources/cell-type-signature/signature-analysis/signature_collapse_guide.csv")
 ```
@@ -44,7 +98,7 @@ sigs_to_collapse <- str_split(sigs_to_collapse$validated.sig.name, " \\| ", simp
 sigs_to_collapse <- sigs_to_collapse %>% t() %>% as.data.frame() %>% as.list()
 ```
 
-# extract signatures to collapse
+## extract signatures to collapse
 ```{r}
 sigs_to_collapse.df <- lapply(sigs_to_collapse, function(l) {
   sigs <- str_subset(l, ".+")
@@ -56,7 +110,7 @@ sigs_to_collapse.df <- lapply(sigs_to_collapse, function(l) {
 names(sigs_to_collapse.df) <- sapply(sigs_to_collapse, function(l) l[1])
 ```
 
-# get y (explained expression)
+## get y (explained expression)
 ```{r}
 y.list <- lapply(sigs_to_collapse.df, function(sigs) {
   h = sigs$h %>% as.matrix()
@@ -66,7 +120,7 @@ y.list <- lapply(sigs_to_collapse.df, function(sigs) {
 })
 ```
 
-# get x (mean gene loading)
+## get x (mean gene loading)
 ```{r}
 x.list <- lapply(sigs_to_collapse.df, function(sigs) {
   w = sigs$w %>% as.matrix()
@@ -75,7 +129,7 @@ x.list <- lapply(sigs_to_collapse.df, function(sigs) {
 })
 ```
 
-# get g (collapsed signature loading)
+## get g (collapsed signature loading)
 ```{r}
 g.list <- lapply(seq(length(y.list)), function(sig.id) {
   y.mtx = y.list[[sig.id]]
@@ -89,7 +143,7 @@ g.list <- lapply(seq(length(y.list)), function(sig.id) {
 names(g.list) <- names(y.list)
 ```
 
-# remove old signatures
+## remove old signatures
 ```{r}
 sigs_to_remove <- sigs_to_collapse %>% unlist() %>% unname() %>% str_subset(".+")
 ```
@@ -104,7 +158,7 @@ gene_loading_new <- gene_loading %>%
   select(-all_of(sigs_to_remove))
 ```
 
-# add collapsed signatures
+## add collapsed signatures
 ```{r}
 newsig_names <- collapse_guide %>%
   filter(grepl("\\|", validated.sig.name))
@@ -121,7 +175,7 @@ sig_loading_new <- cbind(sig_loading_new, as.data.frame(g.list))
 gene_loading_new <- cbind(gene_loading_new, as.data.frame(x.list))
 ```
 
-# map old signature names to new signature names
+## map old signature names to new signature names
 ```{r}
 oldsig_names <- names(gene_loading_new)
 oldsig_names
@@ -142,11 +196,291 @@ names(gene_loading_new) <- signames.df$after.collapse
 names(sig_loading_new) <- signames.df$after.collapse
 ```
 
-# add information to the new loading matrices
+## add information to the new loading matrices
 ```{r}
 gene_loading_new <- cbind(gene_loading_new, gene_loading %>% select(-contains(celltype)))
 sig_loading_new <- cbind(sig_loading_new, sig_loading %>% select(-contains(celltype)))
 ```
+
+# collapsing validation signatures
+## load signatures
+```{r}
+df.sigprofile.validation <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/validation/loading-mean/patient-full-signature-profiles-loading-mean-validation.tsv")
+```
+
+## load validated-collapsed name mappings
+```{r}
+name.map <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", ct, "/loading-matrices/", ct, "-signature-collapse-name-mapping.tsv"))
+})
+name.map <- Reduce(rbind, name.map)
+
+name.map$before.collapse <- stringr::str_replace_all(name.map$before.collapse, "\\.", " | ")
+name.map$before.collapse <- gsub("(?<=[[:lower:]BC])(?=[[:digit:]]+)", " ", name.map$before.collapse, perl=T)
+names(name.map) <- c("validated_collapse", "collapsed.sig.name")
+```
+
+## get new validation signature names
+```{r}
+validated.name.change.guide <- full_join(collapse_guide, name.map, by = "validated_collapse")
+validated.name.change.guide <- validated.name.change.guide %>%
+  select(validation.sig.name, validated_collapse, collapsed.sig.name) %>% 
+  distinct() %>% 
+  drop_na()
+
+validated.name.change.guide <- validated.name.change.guide %>%
+  mutate(validation.sig.name.new = str_replace_all(collapsed.sig.name, "Rep", "New"))
+```
+
+## map new names to validation signature loadings and remove validation signatures without a new name
+```{r}
+df.sigprofile.validation.with.new.names <- df.sigprofile.validation
+names(df.sigprofile.validation.with.new.names) <- plyr::mapvalues(names(df.sigprofile.validation.with.new.names),
+                                                                  from = validated.name.change.guide$validation.sig.name,
+                                                                  to = validated.name.change.guide$validation.sig.name.new)
+
+df.sigprofile.validation.with.new.names <- df.sigprofile.validation.with.new.names %>%
+  select(cohort, sample, contains("New"))
+
+names(df.sigprofile.validation.with.new.names)
+```
+
+## get correct ordering of the columns
+```{r}
+holder <- validated.name.change.guide %>% select(validation.sig.name.new) %>%
+  mutate(ct = factor(str_split(validation.sig.name.new, " ", simplify = T)[,1], levels = celltypes)) %>%
+  group_by(ct) %>%
+  arrange(ct, validation.sig.name.new) %>%
+  ungroup() %>%
+  pull(validation.sig.name.new)
+holder
+```
+
+```{r}
+mtx.sigprofile.validation.with.new.names <- df.sigprofile.validation.with.new.names %>% select(all_of(holder)) %>% as.matrix()
+rm(holder)
+```
+
+## corrplot
+```{r}
+sigprofile.corr.validation <- cor(mtx.sigprofile.validation.with.new.names, use = "complete.obs")
+```
+
+```{r}
+png("test-sig-corr-validation-with-new-names.png", width = 12, height = 12, units = "in", res = 321)
+corrplot::corrplot(sigprofile.corr.validation)
+dev.off()
+```
+
+## compare with collapsed signature loading correlations
+```{r}
+sigprofile.corr.collapsed <- read_tsv("../output/v2/results/LIGER/patient-analysis/patient-signature-profiles/collapsed/loading-mean/patient-full-signature-profiles-correlation-loading-mean-collapsed.tsv")
+
+sigprofile.corr.collapsed <- as.matrix(sigprofile.corr.collapsed)
+rownames(sigprofile.corr.collapsed) <- colnames(sigprofile.corr.collapsed)
+```
+
+```{r}
+sigprofile.corr.multiply <- sigprofile.corr.collapsed * sigprofile.corr.validation
+```
+
+```{r}
+png("test-sig-corr-multiply.png", width = 12, height = 12, units = "in", res = 321)
+corrplot::corrplot(sigprofile.corr.multiply)
+dev.off()
+
+png("test-sig-corr-multiply-sqrt.png", width = 12, height = 12, units = "in", res = 321)
+corrplot::corrplot(sqrt(sigprofile.corr.multiply))
+dev.off()
+```
+
+```{r}
+sigprofile.corr.diff <- (sigprofile.corr.collapsed - sigprofile.corr.validation)
+```
+
+```{r}
+png("test-sig-corr-diff.png", width = 12, height = 12, units = "in", res = 321)
+corrplot::corrplot(sigprofile.corr.diff)
+dev.off()
+```
+
+# NEW - collapse guide generation
+## load validated signature gene loading correlation
+```{r}
+gene.loading.corr.validation <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", ct, "/signature-collapse/", ct, "-gene-loading-correlation-validated.tsv"))
+})
+names(gene.loading.corr.validation) <- celltypes
+```
+
+```{r}
+gene.loading.corr.validation <- lapply(gene.loading.corr.validation, function(df) {
+  mtx <- df |> as.matrix()
+  rownames(mtx) <- colnames(mtx)
+  mtx
+})
+```
+
+```{r}
+lapply(gene.loading.corr.validation, corrplot::corrplot)
+```
+
+## identify validated signatures for collapsing
+```{r}
+gene.loading.corr.validation <- lapply(gene.loading.corr.validation, function(mtx) {
+  mtx > 0.4
+})
+```
+
+```{r}
+lapply(gene.loading.corr.validation, function(mat) ComplexHeatmap::pheatmap(mat, cluster_rows = F, cluster_cols = F, name = "Corr. > 0.4"))
+```
+
+## match up signatures for collapsing
+```{r}
+collapse.ind <- lapply(celltypes, function(ct) {
+  collapse.ind <- list(c(1))
+  holder.mat <- gene.loading.corr.validation[[ct]]
+  
+  for (r in 1:nrow(holder.mat)) {
+    for (c in 1:ncol(holder.mat)) {
+      if(holder.mat[r,c]) {
+        sig.num.to.find = r
+        sig.num.to.add = c
+        sig.num.is.added = F
+        
+        for (rep.sig.num in seq(length(collapse.ind))) {
+          if(sig.num.to.find %in% collapse.ind[[rep.sig.num]]) {
+            collapse.ind[[rep.sig.num]] <- c(collapse.ind[[rep.sig.num]], sig.num.to.add)
+            sig.num.is.added = T
+          }
+        }
+        if(!sig.num.is.added) {
+          collapse.ind <- c(collapse.ind, c(sig.num.to.add))
+        }
+      }
+    }
+  }
+  rm(holder.mat, r, c, sig.num.is.added, sig.num.to.add, sig.num.to.find, rep.sig.num)
+  
+  names(collapse.ind) <- paste(ct, "Rep", seq(length(collapse.ind)))
+  
+  lapply(collapse.ind, function(rep.sig) {
+    unique(rep.sig)
+  })
+})
+names(collapse.ind) <- celltypes
+```
+
+## make collapse guide
+```{r}
+collapse.ind <- lapply(names(collapse.ind), function(ct) {
+  ct.collapse.ind <- collapse.ind[[ct]]
+  lapply(ct.collapse.ind, function(v) {
+    paste(ct, v, sep = " ", collapse = " | ")
+  })
+})
+
+collapse.ind <- lapply(collapse.ind, function(ct.collapse.ind) {
+  data.frame(collapsed.sig.name = names(ct.collapse.ind),
+             validated.sig.name = unlist(ct.collapse.ind))
+})
+```
+
+```{r}
+collapse_guide <- Reduce(rbind, collapse.ind)
+```
+
+## save collapse guide
+```{r}
+write_tsv(collapse_guide, file = "collapse-guide.tsv")
+```
+
+# NEW - collapsing validated signatures
+
+
+# NEW - scoring collapsed signatures in validation
+## load collapsed gene loadings
+```{r}
+df.collapsed.gene.loading <- lapply(celltypes, function(ct) {
+  read_tsv(paste0("../output/v2/results/LIGER/signature-analysis/", ct, "/loading-matrices/", ct, "-gene-loading-collapsed.tsv"))
+})
+names(df.collapsed.gene.loading) <- celltypes
+```
+
+## load validation expression
+```{r}
+validation.exprs <- readRDS("../output/v2/data/cohort-discovery-validation-grouping/Mono/scRNAseq-Mono-scelist-validation.rds")
+validation.exprs <- lapply(validation.exprs, function(sce.cohort) {
+  sce.cohort[intersect(df.collapsed.gene.loading$Mono$gene, rownames(sce.cohort)),]
+})
+
+cohort.ids <- lapply(validation.exprs, function(sce.cohort) {
+  sce.cohort$cohort
+})
+```
+
+## run nnls
+```{r}
+collapsed.sig.loading.in.validation <- lapply(validation.exprs, function(sce.cohort) {
+  NMF::fcnnls(x = df.collapsed.gene.loading$Mono %>% dplyr::select(-gene) %>% as.matrix(),
+              y = logcounts(sce.cohort) %>% as.matrix())
+})
+```
+
+```{r}
+collapsed.sig.loading.in.validation <- lapply(names(collapsed.sig.loading.in.validation), function(cohort) {
+  cell_id <- colnames(validation.exprs[[cohort]])
+  df <- cbind(collapsed.sig.loading.in.validation[[cohort]]$x %>% t() %>% as.data.frame(),
+              colData(validation.exprs[[cohort]]) %>% as.data.frame() %>% select(cohort, sample))
+  df$cell_id <- cell_id
+  df
+})
+```
+
+```{r}
+collapsed.sig.loading.in.validation <- Reduce(rbind, collapsed.sig.loading.in.validation)
+names(collapsed.sig.loading.in.validation) <- str_replace_all(names(collapsed.sig.loading.in.validation), "Rep", "RepVal")
+```
+
+```{r}
+write_tsv(collapsed.sig.loading.in.validation, "test.tsv")
+```
+
+## run nnls on all cohorts at once
+```{r}
+validation.exprs <- Reduce(cbind, validation.exprs)
+cohort.ids <- Reduce(c, cohort.ids)
+```
+
+### construct matrix x and y with cohort information
+```{r}
+mtx.cohort.ids <- model.matrix(~ 0 + cohort_id, data = data.frame(cohort_id = cohort.ids))
+y.with.cohort.ids <- rbind(logcounts(validation.exprs) %>% as.matrix(), 
+                           mtx.cohort.ids %>% t())
+nrow(y.with.cohort.ids)
+```
+
+```{r}
+collapsed.sig.loading.in.validation <- NMF::fcnnls(x = rbind(df.collapsed.gene.loading$Mono %>% dplyr::select(-gene) %>% as.matrix(), 
+                                                             matrix(data = 1, 
+                                                                    nrow = length(unique(cohort.ids)), 
+                                                                    ncol = length(df.collapsed.gene.loading$Mono)-1)),
+                                                   y = y.with.cohort.ids)
+```
+
+```{r}
+collapsed.sig.loading.in.validation <- collapsed.sig.loading.in.validation$x %>% t() %>% as.data.frame()
+collapsed.sig.loading.in.validation <- cbind(collapsed.sig.loading.in.validation, colData(validation.exprs) %>% as.data.frame() %>% select(cohort, sample))
+collapsed.sig.loading.in.validation$cell_id <- colnames(validation.exprs)
+
+names(collapsed.sig.loading.in.validation) <- str_replace_all(names(collapsed.sig.loading.in.validation), "Rep", "RepVal")
+```
+
+```{r}
+
+```
+
 
 
 

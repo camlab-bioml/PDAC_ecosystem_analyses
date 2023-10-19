@@ -1,0 +1,328 @@
+---
+title: "Figure 1"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+suppressPackageStartupMessages({
+  library(magrittr)
+  library(tidyverse)
+  library(SingleCellExperiment)
+  library(scater)
+  library(scran)
+  library(singleCellTK)
+  library(BiocParallel)
+  library(sjstats)
+  library(ggpubr)
+  library(tidyr)
+  library(ComplexHeatmap)
+  library(patchwork)
+})
+```
+
+```{r}
+cohorts <- c("Lee", "Lin", "Peng", "Steele", "Toronto", "Hwang")
+```
+
+# load sces
+```{r}
+sce.list <- lapply(cohorts, function(c) {
+  readRDS(paste0("../output/v2/data/Azimuth-annotation/scRNASeq-Azimuth-assigned-sce-", c, ".rds"))
+})
+names(sce.list) <- cohorts
+```
+
+```{r}
+lapply(sce.list, function(sce) head(rownames(sce)))
+```
+
+# get cell meta data
+```{r}
+coldata.list <- lapply(sce.list, colData)
+coldata.common <- intersect(names(coldata.list$Peng), names(coldata.list$Hwang))
+coldata.list <- lapply(coldata.list, function(coldata) {
+  coldata %>% as.data.frame() %>% select(all_of(coldata.common))
+})
+coldata <- Reduce(rbind, coldata.list) %>% as.data.frame()
+```
+
+# group cohorts
+```{r}
+groups <- list(Discovery = c("Lee", "Lin", "Steele", "Toronto"),
+               Validation = c("Peng", "Hwang"))
+```
+
+```{r}
+coldata.list <- lapply(groups, function(group) {
+  coldata %>% filter(grepl(paste(group, collapse = "|"), cohort))
+})
+```
+
+# set colors for cohorts
+```{r}
+## ggplot dotplot you can set shape=21
+scale_color_cohort <- function(cohorts) {
+  cohort.pal <- pal_npg("nrc")(length(cohorts))
+  names(cohort.pal) <- str_split(cohorts, " ", simplify = T)[,1]
+  scale_color_manual(values = cohort.pal)
+}
+
+cohort.pal <- pal_npg("nrc")(length(cohorts))
+names(cohort.pal) <- cohorts
+```
+
+# get metadata of interest
+```{r}
+coldata.list <- lapply(coldata.list, function(coldata) {
+  coldata %>% 
+    group_by(cohort, sample) %>%
+    summarise(num_donor = n_distinct(sample),
+              num_cell = n(),
+              num_genes = max(detected),
+              percent_mito = mean(subsets_mito_percent)) %>%
+    ungroup() %>%
+    group_by(cohort) %>%
+    mutate(num_donor = n_distinct(sample)) %>%
+    ungroup()
+})
+```
+
+# make metadata plots
+```{r}
+p.list <- lapply(names(coldata.list), function(group) {
+  coldata <- coldata.list[[group]]
+  
+  p.num_donor <- ggplot(coldata, aes(x = cohort, fill = cohort)) +
+    geom_bar(stat = "count") +
+    scale_fill_manual(values = cohort.pal) +
+    coord_flip() +
+    labs(y = "# donors", x = group) +
+    theme_pubr()
+  
+  p.num_cell <- ggplot(coldata, aes(x = cohort, y = num_cell, color = cohort, fill = cohort)) +
+    geom_violin(trim = F) +
+    scale_fill_manual(values = cohort.pal) +
+    scale_color_cohort(cohorts) +
+    geom_boxplot(width = 0.1, fill = "white", color = "grey40") +
+    scale_y_continuous(trans = 'log10') +
+    coord_flip() +
+    labs(y = "# cells", x = NULL) + 
+    theme_pubr()
+  
+  p.num_gene <- ggplot(coldata, aes(x = cohort, y = num_genes, color = cohort, fill = cohort)) +
+    geom_violin(trim = F) +
+    scale_fill_manual(values = cohort.pal) +
+    scale_color_cohort(cohorts) +
+    geom_boxplot(width = 0.1, fill = "white", color = "grey40") +
+    coord_flip() +
+    labs(y = "# genes", x = NULL) +
+    theme_pubr()
+  
+  p.percent_mito <- ggplot(coldata, aes(x = cohort, y = percent_mito, color = cohort, fill = cohort)) +
+    geom_violin(trim = F) +
+    scale_fill_manual(values = cohort.pal) +
+    scale_color_cohort(cohorts) +
+    geom_boxplot(width = 0.1, fill = "white", color = "grey40") +
+    coord_flip() +
+    labs(y = "% mito", x = NULL) +
+    theme_pubr()
+  
+  p.num_donor + p.num_cell + p.num_gene + p.percent_mito + plot_layout(guides = "collect", nrow = 1) & theme(legend.position = "none")
+})
+names(p.list) <- names(coldata.list)
+p <- ggarrange(p.list$Discovery, p.list$Validation, nrow = 2, heights = sapply(groups, function(group) {length(group)+2}))
+p
+
+ggsave(filename = "test-fig1-C.png", plot = p, width = 15, height = 7, units = "in", dpi = "retina")
+```
+
+# subset to common genes across cohorts
+```{r}
+sce.list <- lapply(sce.list, function(sce) {
+  rownames(sce) <- paste(rowData(sce)$ensembl_id, rownames(sce), sep = "_")
+  sce
+})
+
+genes <- lapply(sce.list, rownames)
+genes.common <- Reduce(intersect, genes)
+sce.list <- lapply(sce.list, function(sce) sce[genes.common,])
+```
+
+# cbind sces by discovery/validation
+```{r}
+reddims.common <- intersect(reducedDimNames(sce.list$Peng), reducedDimNames(sce.list$Hwang))
+
+sce.list <- lapply(sce.list, function(sce) {
+  colData(sce) <- colData(sce) %>% as.data.frame() %>% select(all_of(coldata.common)) %>% DataFrame()
+  reducedDims(sce) <- reducedDims(sce)[reddims.common]
+  reducedDims(sce)["HARMONY"] <- NULL
+  reducedDims(sce)["PCA_ON_HARMONY"] <- NULL
+  #logcounts(sce) <- NULL
+  sce
+})
+
+#sce <- Reduce(cbind, sce.list)
+sce.list <- lapply(groups, function(group) {
+  Reduce(cbind, sce.list[group])
+})
+
+sce.list <- lapply(sce.list, function(sce) {
+  sce$celltype <- sce$predicted.annotation.l1
+  sce
+})
+```
+
+# run Seurat PCA and UMAP for better plots
+```{r}
+sce.list <- lapply(sce.list, function(sce) {
+  sce <- runSeuratNormalizeData(sce, useAssay = "counts")
+  sce <- runSeuratFindHVG(sce, useAssay = "counts")
+  assay(sce, "counts") <- NULL
+  sce <- runSeuratScaleData(sce, useAssay = "seuratNormData")
+  assay(sce, "SeuratNormData") <- NULL
+  sce <- runSeuratPCA(sce, useAssay = "seuratScaledData")
+  sce <- runSeuratUMAP(sce)
+  sce
+})
+```
+
+```{r}
+assayNames(sce.list$Discovery)
+```
+
+# if you already have Seurat PCA and UMAP
+```{r}
+sce.list <- lapply(names(sce.list), function(sce.name) {
+  sce <- sce.list[[sce.name]]
+  reducedDims(sce) <- redims.list[[sce.name]]
+  sce
+})
+names(sce.list) <- c("Discovery", "Validation")
+```
+
+# plot UMAPs
+## get desired metadata
+```{r}
+dim.red.plot = "seuratUMAP"
+
+df.redim.list <- lapply(sce.list, function(sce) {
+  data.frame(Cell_ID = colnames(sce),
+             Sample = sce$sample,
+             Cohort = sce$cohort,
+             Cell_type = sce$celltype,
+             UMAP_1 = reducedDim(sce, dim.red.plot)[,1],
+             UMAP_2 = reducedDim(sce, dim.red.plot)[,2])
+})
+```
+
+## get detailed immune labels
+```{r}
+sce.immune.list <- lapply(cohorts, function(c) {
+  readRDS(paste0("../output/v2/data/SingleR-annotation/immune/sceRNASeq-SingleR-annotated-immune-sce-", c, ".rds"))
+})
+names(sce.immune.list) <- cohorts
+
+label.immune.list <- lapply(sce.immune.list, function(sce) {
+  data.frame(Cell_ID = colnames(sce),
+             Cell_type = sce$singler.pruned.label)
+})
+label.immune <- Reduce(rbind, label.immune.list)
+```
+
+## tidyup metadata
+```{r}
+table(df.redim.list$Discovery$Cell_type)
+
+df.redim.list <- lapply(df.redim.list, function(df.redim) {
+  df.redim$Cell_type <- plyr::mapvalues(df.redim$Cell_type,
+                                        from = c("activated_stellate", "quiescent_stellate", "alpha", "beta", "delta", "epsilon", "gamma"),
+                                        to = c("fibroblast", "fibroblast", "endocrine", "endocrine", "endocrine", "endocrine", "endocrine")) |>
+    tools::toTitleCase()
+  
+  df.redim %>%
+    mutate(Cell_type = ifelse(Cell_type == "Immune", Cell_ID, Cell_type)) %>%
+    mutate(Cell_type = plyr::mapvalues(Cell_type, from = label.immune$Cell_ID, to = label.immune$Cell_type, warn_missing = F) |> tools::toTitleCase()) %>%
+    # add column n with counts for each celltype
+    add_count(Cell_type) %>% 
+    # combine the cell type and count n into one column
+    mutate(Cell_type = paste0(Cell_type, ' (', n, ')')) %>%
+    # add column n with counts for each cohort
+    add_count(Cohort) %>% 
+    # combine the cohort and count n into one column
+    mutate(Cohort = paste0(Cohort, ' (', nn, ')')) %>%
+    # set 'NA (*)' labels to NA
+    mutate(Cell_type = ifelse(grepl("NA", Cell_type), NA, Cell_type))
+    
+})
+
+table(df.redim.list$Discovery$Cell_type) %>% sort(decreasing = T)
+table(df.redim.list$Validation$Cell_type) %>% sort(decreasing = T)
+table(df.redim.list$Discovery$Cohort) %>% sort(decreasing = T)
+table(df.redim.list$Validation$Cohort) %>% sort(decreasing = T)
+```
+
+```{r}
+cohorts.with.num.cell <- c(df.redim.list$Discovery$Cohort, df.redim.list$Validation$Cohort) %>% unique()
+
+cohorts
+cohorts.with.num.cell
+factor(str_split(cohorts.with.num.cell, " ", simplify = T)[,1], levels = cohorts) %>% rank()
+cohorts.with.num.cell[order(factor(str_split(cohorts.with.num.cell, " ", simplify = T)[,1], levels = cohorts) %>% rank())]
+
+cohort.pal <- pal_npg("nrc")(length(cohorts.with.num.cell))
+names(cohort.pal) <- cohorts.with.num.cell[order(factor(str_split(cohorts.with.num.cell, " ", simplify = T)[,1], levels = cohorts) %>% rank())]
+```
+
+```{r}
+p.redim.list <- lapply(df.redim.list, function(df.redim) {
+  p.celltype <- ggplot(df.redim, aes(x = UMAP_1, y= UMAP_2, color = Cell_type)) +
+    geom_point(alpha = 0.3, size = 0.1, shape = 1) + 
+    theme_pubr() +
+    labs(x = "UMAP 1", y = "UMAP 2", colour = "Cell type") + 
+    guides(color = guide_legend(override.aes = list(size = 5, alpha = 0.8, shape = 16)))
+  
+  p.cohort <- ggplot(df.redim, aes(x = UMAP_1, y= UMAP_2, color = Cohort)) +
+    geom_point(alpha = 0.3, size = 0.1, shape = 1) + 
+    scale_color_manual(values = cohort.pal) +
+    theme_pubr() +
+    labs(x = "UMAP 1", y = "UMAP 2") + 
+    guides(color = guide_legend(override.aes = list(size = 5, alpha = 1, shape = 16)))
+  
+  p.celltype + p.cohort + plot_layout(guides = "auto", nrow = 1) & theme(legend.position = "right")
+})
+
+p.redim <- ggarrange(p.redim.list$Discovery, p.redim.list$Validation, nrow = 2)
+p.redim
+
+ggsave(filename = "test-fig1-D.png", plot = p.redim, width = 15, height = 7, units = "in", dpi = "retina")
+```
+
+```{r}
+png(filename = "test-fig1-full.png", width = 15, height = 15, units = "in", res = 321)
+p / p.redim +  plot_layout(heights = c(1, 3))
+dev.off()
+```
+
+```{r}
+redims.list <- lapply(sce.list, function(sce) {
+  reducedDims(sce)
+})
+
+saveRDS(redims.list, "reduced-dimensions-for-figure-1.rds")
+
+rm(sce.list)
+```
+
+
+
+
+
+
+
+
+
+
+
