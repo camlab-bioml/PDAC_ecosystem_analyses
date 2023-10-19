@@ -1,55 +1,49 @@
-validation.sig.name,validated.sig.name
-Mono 1,Mono 5 | Mono 6
-Mono 2,Mono 3
-Mono 3,Mono 4
-Mono 4,NA
-Mono 5,Mono 2
-Mono 6,NA
-Mono 7,Mono 1
-stellate 1,stellate 5
-stellate 2,stellate 3 | stellate 4
-stellate 3,stellate 7
-stellate 4,stellate 2
-stellate 5,stellate 1
-stellate 6,NA
-stellate 7,stellate 6
-CD8 1,CD8 2 | CD8 3
-CD8 2,CD8 5
-CD8 3,NA
-CD8 4,CD8 1
-CD8 5,CD8 4
-CD4 1,CD4 2
-CD4 2,CD4 5
-CD4 3,CD4 3
-CD4 4,CD4 1
-CD4 5,CD4 4
-B 1,B 6
-B 2,NA
-B 3,B 1
-B 4,B 7
-B 5,B 2
-B 6,B 4
-B 7,B 3
-B 8,B 5
-endothelial 1,endothelial 2
-endothelial 2,endothelial 4
-endothelial 3,endothelial 5
-endothelial 4,endothelial 1
-endothelial 5,endothelial 3
-DC 1,DC 3 | DC 5
-DC 2,DC 2
-DC 3,DC 4
-DC 4,NA
-DC 5,DC 1
-ductal 1,NA
-ductal 10,NA
-ductal 11,ductal 4
-ductal 12,NA
-ductal 2,ductal 2
-ductal 3,ductal 7
-ductal 4,NA
-ductal 5,ductal 3
-ductal 6,NA
-ductal 7,ductal 1 | ductal 9 | ductal 10
-ductal 8,NA
-ductal 9,ductal 5 | ductal 6 | ductal 8
+collapsed.sig.name,validated.sig.name
+Mono Rep 1,Mono 1 | Mono 11
+Mono Rep 2,Mono 2
+Mono Rep 3,Mono 3
+Mono Rep 4,Mono 4
+Mono Rep 5,Mono 5
+Mono Rep 6,Mono 6
+Mono Rep 7,Mono 7
+Mono Rep 8,Mono 8
+Mono Rep 9,Mono 9
+Mono Rep 10,Mono 10
+Mono Rep 11,Mono 12
+stellate Rep 1,stellate 1
+stellate Rep 2,stellate 2
+stellate Rep 3,stellate 3
+stellate Rep 4,stellate 4
+stellate Rep 5,stellate 5
+stellate Rep 6,stellate 6
+stellate Rep 7,stellate 7
+CD8 Rep 1,CD8 1
+CD8 Rep 2,CD8 2
+CD8 Rep 3,CD8 3
+CD8 Rep 4,CD8 4
+CD8 Rep 5,CD8 5
+CD4 Rep 1,CD4 1
+CD4 Rep 2,CD4 2
+CD4 Rep 3,CD4 3
+CD4 Rep 4,CD4 4
+CD4 Rep 5,CD4 5
+B Rep 1,B 1
+B Rep 2,B 2
+B Rep 3,B 3
+B Rep 4,B 4
+B Rep 5,B 5
+endothelial Rep 1,endothelial 1
+endothelial Rep 2,endothelial 2
+endothelial Rep 3,endothelial 3
+endothelial Rep 4,endothelial 4
+endothelial Rep 5,endothelial 5
+DC Rep 1,DC 1
+DC Rep 2,DC 2
+DC Rep 3,DC 3
+ductal Rep 1,ductal 1
+ductal Rep 2,ductal 2
+ductal Rep 3,ductal 3
+ductal Rep 4,ductal 4
+ductal Rep 5,ductal 5
+ductal Rep 6,ductal 6
+ductal Rep 7,ductal 7

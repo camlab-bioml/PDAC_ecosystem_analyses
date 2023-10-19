@@ -1,0 +1,5 @@
+﻿Pan_B,Naïve_B,IgM_memory_B,Switched_memory_B,Germinal_centre_B,Plasmablast,Plasma,B_reg
+CD19,IGHD,CD27,CD27,BCL6,CD27,CD38,IL10
+MS4A1,,IGHM,IGHA1,,CD38,SDC1,
+CD79A,,,IGHG1,,MKI67,TNFRSF17,
+CD22,,,,,IRF4,IRF4,
