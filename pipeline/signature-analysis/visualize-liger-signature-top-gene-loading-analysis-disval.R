@@ -25,5 +25,6 @@ set.seed(42)
 Heatmap(t(w.mtx), 
         name = "Gene loading",
         left_annotation = row_ha,
+        show_column_names = FALSE,
         col = viridisLite::viridis(100, option = "C"))
 dev.off()

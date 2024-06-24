@@ -8,9 +8,13 @@ suppressPackageStartupMessages({
   library(ggsci)
   library(patchwork)
   library(dittoSeq)
+  library(magick)
 })
 
 set.seed(123L)
+
+# load scematic
+schematic <- image_read_pdf(snakemake@input[['schematic']]) |> image_ggplot()
 
 groups <- list(
   discovery = snakemake@params[["cohorts_discovery"]],
@@ -18,8 +22,8 @@ groups <- list(
 )
 
 coldata.list <- list(
-  Discovery = readRDS(snakemake@input[['metadata_dis']]),
-  Validation = readRDS(snakemake@input[['metadata_val']])
+  Discovery = read_tsv(snakemake@input[['metadata_dis']]),
+  Validation = read_tsv(snakemake@input[['metadata_val']])
 )
 
 print(head(coldata.list$Discovery))
@@ -35,8 +39,8 @@ sce.list <- list(
 )
 
 df.redim.list <- list(
-  Discovery = readRDS(snakemake@input[['dimred_dis']]),
-  Validation = readRDS(snakemake@input[['dimred_val']])
+  Discovery = read_tsv(snakemake@input[['dimred_dis']]),
+  Validation = read_tsv(snakemake@input[['dimred_val']])
 )
 
 print(head(df.redim.list$Discovery))
@@ -58,10 +62,10 @@ print(head(df.redim.list$Discovery))
 print(head(df.redim.list$Validation))
 
 # set colors for cell types
-celltype.pal.dis <- RColorBrewer::brewer.pal(length(unique(df.redim.list$Discovery$Cell_type)), "Set1")
+celltype.pal.dis <- RColorBrewer::brewer.pal(length(unique(df.redim.list$Discovery$Cell_type)), snakemake@params[["cell_type_pallete"]])
 names(celltype.pal.dis) <- unique(df.redim.list$Discovery$Cell_type)
 
-celltype.pal.val <- RColorBrewer::brewer.pal(length(unique(df.redim.list$Validation$Cell_type)), "Set1")
+celltype.pal.val <- RColorBrewer::brewer.pal(length(unique(df.redim.list$Validation$Cell_type)), snakemake@params[["cell_type_pallete"]])
 names(celltype.pal.val) <- unique(df.redim.list$Validation$Cell_type)
 
 celltype.pal <- data.frame(
@@ -86,6 +90,11 @@ scale_color_cohort <- function(cohorts) {
   scale_color_manual(values = cohort.pal)
 }
 
+# print the schematic
+ggsave(filename = snakemake@output[["figure1_a"]], plot = schematic, dpi = "retina")
+print("Schematic plot successfully created: ")
+print(snakemake@output[["figure1_a"]])
+
 # make metadata plots
 p.list <- lapply(names(coldata.list), function(group) {
   coldata <- coldata.list[[group]]
@@ -99,7 +108,7 @@ p.list <- lapply(names(coldata.list), function(group) {
     theme(axis.text.y = element_text(face = "bold"),
           axis.title.y = element_text(face = "bold"),
           axis.title.x = element_text(face = "bold"))
-  
+
   p.num_cell <- ggplot(coldata, aes(x = cohort, y = num_cell, color = cohort, fill = cohort)) +
     geom_violin(trim = F) +
     scale_fill_manual(values = cohort.pal) +
@@ -108,8 +117,13 @@ p.list <- lapply(names(coldata.list), function(group) {
     scale_y_continuous(trans = 'log10') +
     coord_flip() +
     labs(y = "Cells per sample", x = NULL) + 
+    #scale_y_continuous(labels = scales::scientific) +
     theme_pubr() +
     theme(axis.title.x = element_text(face = "bold"), axis.text.y = element_blank())
+
+  if (group == "Discovery") {
+    p.num_cell <- p.num_cell + scale_y_continuous(trans = 'log10', breaks = c(300, 1000, 5000, 30000))
+  }
   
   p.num_gene <- ggplot(coldata, aes(x = cohort, y = num_genes, color = cohort, fill = cohort)) +
     geom_violin(trim = F) +
@@ -118,6 +132,7 @@ p.list <- lapply(names(coldata.list), function(group) {
     geom_boxplot(width = 0.1, fill = "white", color = "grey40") +
     coord_flip() +
     labs(y = "Detected genes", x = NULL) +
+    #scale_y_continuous(labels = scales::scientific) +
     theme_pubr() +
     theme(axis.title.x = element_text(face = "bold"), axis.text.y = element_blank())
 
@@ -126,9 +141,10 @@ p.list <- lapply(names(coldata.list), function(group) {
     scale_fill_manual(values = cohort.pal) +
     scale_color_cohort(cohorts) +
     geom_boxplot(width = 0.1, fill = "white", color = "grey40") +
-    ylim(0, NA) +
+    ylim(1, NA) +
     coord_flip() +
     labs(y = "Detected UMIs", x = NULL) +
+    #scale_y_continuous(labels = scales::scientific) +
     theme_pubr() +
     theme(axis.title.x = element_text(face = "bold"), axis.text.y = element_blank())
   
@@ -216,7 +232,7 @@ p.stackedbars.list <- lapply(names(df.redim.list), function(group) {
     scale_fill_manual(values = c(celltype.pal.dis, celltype.pal.val)) +
     labs(x = NULL) + 
     coord_flip() +
-    labs(y = "Cellt type abundance", x = NULL) +
+    labs(y = "Cell type abundance", x = NULL) +
     theme_pubr() +
     theme(
       axis.text.y = element_blank(),
@@ -231,29 +247,59 @@ p.stackedbars.list <- lapply(names(df.redim.list), function(group) {
   p.celltype + plot_layout(guides = "collect", nrow = 1)
 })
 names(p.stackedbars.list) <- names(coldata.list)
-p.stackedbars <- ggarrange(p.stackedbars.list$Discovery, p.stackedbars.list$Validation, nrow = 2)
+p.stackedbars <- ggarrange(p.stackedbars.list$Discovery + theme(axis.title.x = element_blank()), p.stackedbars.list$Validation, nrow = 2)
 ggsave(filename = snakemake@output[['figure1_e']], plot = p.stackedbars, 
        width = snakemake@params[['stacked_bar_plot_width']], height = snakemake@params[['stacked_bar_plot_height']], 
        units = "in", dpi = "retina")
 
 print("Stacked bar plot successfully created")
 
+# make cell type marker dot plots
+p.markerdots.list <- lapply(names(sce.list), function(group) {
+  sce <- sce.list[[group]]
+  rownames(sce) <- str_split(rownames(sce), "_", simplify = T)[,2]
+  sce$celltype <- plyr::mapvalues(sce$celltype, from = cell_type_rename$old_name, cell_type_rename$new_name)
+
+  p.markerdots <- dittoDotPlot(sce, 
+                               vars = c("EPCAM", "CDH1", "KRT19", "KRT5", "KRT8", "CDH5", "COL1A1", "COL1A2", "VIM", "ACTA2", "PTPRC", "CD68", "CD14", "FCGR3A", "CD1C", "CLEC9A", "MS4A1", "CD3D", "CD3E", "CD4", "CD8A", "NKG7"), 
+                               group.by = "celltype", 
+                               ylab = NULL,
+                               legend.color.title = "Relative\nexpression",
+                               legend.size.title = "Percent\nexpression")
+})
+names(p.markerdots.list) <- names(sce.list)
+p.markerdots <- ggarrange(p.markerdots.list$Discovery + theme(legend.position = "none"), p.markerdots.list$Validation, nrow = 1)
+ggsave(filename = snakemake@output[['figure1_f']], plot = p.markerdots, 
+       width = snakemake@params[['marker_dot_plot_width']], height = snakemake@params[['marker_dot_plot_height']], 
+       units = "in", dpi = "retina")
+
+print("Marker dot plot successfully created")
+
 # plot Figure 1
 design <- "
-AAAAAA
-BBBBBC
-BBBBBC
-BBBBBC
+AAAAAAAA
+AAAAAAAA
+AAAAAAAA
+AAAAAAAA
+BBBBBBBB
+BBBBBBBB
+CCCCCCDD
+CCCCCCDD
+CCCCCCDD
+CCCCCCDD
+CCCCCCDD
+EEEEEEEE
+EEEEEEEE
 "
 
 pdf(file = snakemake@output[["figure1_pdf"]], width = snakemake@params[["figure1_width"]], height = snakemake@params[["figure1_height"]])
-p + p.redim + p.stackedbars +  plot_layout(design = design)
+schematic + p + p.redim + p.stackedbars + p.markerdots + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 20))
 dev.off()
 
 print("Figure 1 PDF successfully created")
 
-png(file = snakemake@output[["figure1_png"]], width = snakemake@params[["figure1_width"]], height = snakemake@params[["figure1_height"]], units = "in", res = 321)
-p + p.redim + p.stackedbars +  plot_layout(design = design)
+png(file = snakemake@output[["figure1_png"]], width = snakemake@params[["figure1_width"]], height = snakemake@params[["figure1_height"]], units = "in", res = 360)
+schematic + p + p.redim + p.stackedbars + p.markerdots + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 20))
 dev.off()
 
 print("Figure 1 PNG successfully created")

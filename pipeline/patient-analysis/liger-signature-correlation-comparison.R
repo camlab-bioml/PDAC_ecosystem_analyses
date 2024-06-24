@@ -1,6 +1,7 @@
 suppressPackageStartupMessages({
         library(tidyverse)
-        library(ComplexHeatmap)
+        library(magrittr)
+        library(readxl)
 })
 
 # Load the data
@@ -149,3 +150,87 @@ with(dfc, cor.test(correlation_discovery, correlation_validation))
 with(filter(dfc, same_cell_type), cor.test(correlation_discovery, correlation_validation))
 
 with(filter(dfc, !same_cell_type), cor.test(correlation_discovery, correlation_validation))
+
+
+# Compare signature co-occurrence in discovery vs. validation
+sig.interpt <- read_xlsx(snakemake@input[["sig_interpretation"]])
+
+dfc.list <- lapply(sig.interpt$signature, function(sig) {
+        dfc |>
+                filter(grepl(paste0("^", sig, "_|_", sig, "$"), cell_type_str)) |>
+                mutate(high_confidence = ifelse(correlation_discovery > 0.4 & correlation_validation > 0.4, TRUE, FALSE)) |>
+                mutate(signature = ifelse(signature_1 == sig, signature_2,
+                        ifelse(signature_2 == sig, signature_1, NA)
+                )) |>
+                mutate(celltype = gsub(" [0-9]| [0-9][0-9]", "", signature))
+})
+names(dfc.list) <- sig.interpt$signature
+
+## load dis-val correlation and dis-dis validation
+dis.val.corr <- lapply(snakemake@input[["validated_sig_df"]], read_tsv)
+celltypes <- snakemake@params[["celltypes"]]
+names(dis.val.corr) <- celltypes
+
+dis.val.corr <- lapply(dis.val.corr, function(df) {
+        df |> filter(validation.1.corr > 0.5)
+})
+
+dis.val.corr <- lapply(celltypes, function(ct) {
+        dis.val.corr[[ct]] |> mutate(validated.name = paste0(ct, " ", seq_len(nrow(dis.val.corr[[ct]]))))
+})
+names(dis.val.corr) <- celltypes
+
+collapse.guide <- read_tsv(snakemake@input[["signature_collapse_guide"]])
+collapsed.sigs <- str_split(collapse.guide$validated.sig.name, "\\| ", simplify = T)[, 2]
+collapsed.sigs <- collapsed.sigs[nzchar(collapsed.sigs)]
+
+for (sig in collapsed.sigs) {
+        ct <- gsub(" [0-9]| [0-9][0-9]", "", sig)
+        dis.val.corr[[ct]] <- dis.val.corr[[ct]] |>
+                filter(validated.name != sig)
+        dis.val.corr[[ct]] <- dis.val.corr[[ct]] |>
+                mutate(validated.name = paste0(ct, " ", seq_len(nrow(dis.val.corr[[ct]]))))
+}
+rm(sig, ct)
+
+dis.val.corr <- Reduce(rbind, dis.val.corr)
+dis.val.corr.for.join <- dis.val.corr |> dplyr::select(validated.name, validation.1.corr)
+names(dis.val.corr.for.join) <- c("signature", "validation confidence")
+
+## add the validation confidence to the dfc list
+dfc.list <- lapply(dfc.list, function(dfc.sig) {
+        if (nrow(dfc.sig) == 0) {
+                return(dfc.sig)
+        }
+        left_join(dfc.sig, dis.val.corr.for.join, by = "signature")
+})
+
+dfc.list <- dfc.list[!sapply(dfc.list, is.null)]
+
+saveRDS(dfc.list, snakemake@output[["signature_correlation_comparison_data_frame_list"]])
+
+# general signature co-occurrence agreement between discovery an validation
+sigs <- names(dfc.list)
+dis.val.agree <- lapply(sigs, function(sig) {
+  print(sig)
+  df <- dfc.list[[sig]]
+  if(nrow(df) == 0) {
+    return(NULL)
+  } else if (all(is.na(df$correlation_discovery)) | all(is.na(df$correlation_validation))) {
+    return(NULL)
+  }
+  cor.test(df$correlation_discovery, df$correlation_validation, use = "na.or.complete")
+})
+dis.val.agree <- setNames(dis.val.agree, sigs)
+dis.val.agree <- dis.val.agree[!sapply(dis.val.agree, is.null)]
+
+dis.val.agree <- data.frame(signature = names(dis.val.agree),
+                            dis_val_corr = unlist(lapply(dis.val.agree, function(corr.obj) corr.obj$estimate)),
+                            p_value = unlist(lapply(dis.val.agree, function(corr.obj) corr.obj$p.value)))
+
+dis.val.agree <- dis.val.agree |>
+  mutate(celltype = gsub(" [0-9]| [0-9][0-9]", "", signature)) #|>
+  #mutate(celltype = plyr::mapvalues(celltype, from = cell_type_rename$old_name, to = cell_type_rename$new_name))
+
+write_tsv(dis.val.agree, snakemake@output[["signature_cooccurrence_agreement_data_frame"]])
+

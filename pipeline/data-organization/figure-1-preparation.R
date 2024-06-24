@@ -1,3 +1,9 @@
+#!/usr/local/bin/R
+
+#.libPaths()
+#version
+#rownames(installed.packages())
+
 suppressPackageStartupMessages({
   library(magrittr)
   library(tidyverse)
@@ -6,6 +12,7 @@ suppressPackageStartupMessages({
   library(singleCellTK)
   library(BiocParallel)
   library(sjstats)
+  library(readr)
 })
 
 set.seed(123L)
@@ -59,7 +66,7 @@ coldata <- coldata %>%
 print("Metadata successfully computed")
 
 # save metadata
-saveRDS(coldata, file = snakemake@output[['metadata']])
+write_tsv(coldata, file = snakemake@output[['metadata']])
 
 # subset to common genes across celltypes
 sce.list <- lapply(sce.list, function(sce) {
@@ -119,7 +126,7 @@ assays(sce)
 sce <- runSeuratPCA(sce, useAssay = "seuratNormData")
 #sce <- runSeuratPCA(sce, useAssay = "seuratScaledData")
 #sce <- runHarmony(sce, useReducedDim = "seuratPCA", batch = "cohort", reducedDimName = "HARMONY", theta = 2, sigma = 0.1, nComponents = 50)
-sce <- runSeuratFindClusters(sce, useAssay = "seuratNormData", useReduction = "pca", dims = 10, algorithm = "louvain", resolution = 0.8)
+#sce <- runSeuratFindClusters(sce, useAssay = "seuratNormData", useReduction = "pca", dims = 10, algorithm = "louvain", resolution = 0.8)
 print("Available reducedDims:")
 reducedDims(sce)
 ncol(sce)
@@ -147,8 +154,9 @@ df.redim <- data.frame(Cell_ID = colnames(sce),
                        Cohort = sce$cohort,
                        Cell_type = sce$celltype,
                        UMAP_1 = reducedDim(sce, dim.red.plot)[,1],
-                       UMAP_2 = reducedDim(sce, dim.red.plot)[,2],
-                       Seurat_cluster = sce$Seurat_louvain_Resolution0.8)
+                       UMAP_2 = reducedDim(sce, dim.red.plot)[,2]
+                       #Seurat_cluster = sce$Seurat_louvain_Resolution0.8
+                       )
 
 # tidyup metadata
 print("Cell types:")
@@ -180,7 +188,7 @@ cohorts.with.num.cell[order(factor(str_split(cohorts.with.num.cell, " ", simplif
 cohorts.with.num.cell
 
 # save df.redim.list
-saveRDS(df.redim, file = snakemake@output[['dimred']])
+write_tsv(df.redim, file = snakemake@output[['dimred']])
 
 print(paste0("UMAP coordinates and cell metadata successfully saved for ", snakemake@wildcards[['group']]))
 

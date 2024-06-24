@@ -1,3 +1,8 @@
+# fix some weird issue with the R environment
+#BiocManager::install(version = "3.18")
+#remotes::install_version("matrixStats", version = "1.1.0", repos = "https://cloud.r-project.org")
+#library(matrixStats)
+
 suppressPackageStartupMessages({
         library(magrittr)
         library(tidyverse)

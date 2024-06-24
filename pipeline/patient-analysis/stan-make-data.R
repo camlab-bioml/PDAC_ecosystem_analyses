@@ -8,8 +8,17 @@ suppressPackageStartupMessages({
   library(ggpubr)
 })
 
+# signatures to remove
+ambient.sigs <- read_csv(snakemake@input[['ambient_sigs']])$signature
+
 celltypes <- snakemake@params[["celltypes"]]
 condition <- snakemake@wildcards[["condition"]]
+
+if (condition == "collapsed") {
+   ambient.sigs <- gsub("Sig", "Rep", ambient.sigs)
+} else if (condition == "collapsed-scored-validation"){
+   ambient.sigs <- gsub("Sig", "RepVal", ambient.sigs)
+}
 
 print("Cell types used for Stan model:")
 print(celltypes)
@@ -32,6 +41,15 @@ df.sig.list <- lapply(snakemake@input[['celltype_sig_loading_mtxs']], read_tsv)
 names(df.sig.list) <- celltypes
 
 df.sig.mean <- read_tsv(snakemake@input[['sig_loading_profiles']])
+
+# removing ambient signatures
+df.sig.list <- lapply(df.sig.list, function(df.sig) {
+  df.sig %>%
+    dplyr::select(-any_of(ambient.sigs))
+})
+
+df.sig.mean <- df.sig.mean %>%
+  dplyr::select(-any_of(ambient.sigs))
 
 # removing samples with too few cells
 lapply(celltypes, function(ct) {
@@ -58,6 +76,19 @@ samples.common <- Reduce(intersect, lapply(df.sig.list, function(df.sig) unique(
 samples.union <- Reduce(union, lapply(df.sig.list, function(df.sig) unique(df.sig$sample)))
 samples.union
 
+samples.cohort.pairs <- Reduce(rbind, lapply(df.sig.list, function(df.sig) {
+  df.sig %>%
+    dplyr::select(sample, cohort) %>%
+    distinct()
+})) %>% 
+  distinct() %>%
+  arrange(sample)
+
+samples.encodings <- data.frame(sample = samples.union,
+                                cohort = plyr::mapvalues(samples.union, from = samples.cohort.pairs$sample, to = samples.cohort.pairs$cohort),
+                                encoding = seq_along(samples.union) %>% as.numeric())
+write_tsv(samples.encodings, snakemake@output[['samples_encodings']])
+
 # construct elements of Stan data list
 stan.data.list <- lapply(names(df.sig.list), function(ct) {
   df.sig <- df.sig.list[[ct]] %>% 
@@ -72,8 +103,8 @@ stan.data.list <- lapply(names(df.sig.list), function(ct) {
     Y = df.sig %>% dplyr::select(contains(ct)) %>% as.matrix(),
     y = (df.sig %>% dplyr::select(contains(ct)) %>% as.matrix()) / sd(df.sig %>% dplyr::select(contains(ct)) %>% as.matrix()),
     x = plyr::mapvalues(df.sig$sample, 
-                        from = samples.union,
-                        to = seq_along(samples.union) %>% as.numeric(),
+                        from = samples.encodings$sample %>% as.character(),
+                        to = samples.encodings$encoding %>% as.numeric(),
                         warn_missing = FALSE)
   )
 })
@@ -113,8 +144,11 @@ saveRDS(stan.data, file = snakemake@output[["stan_data"]])
 sigs.order <- lapply(stan.data.list, function(df) {colnames(df$y)}) %>% unlist()
 sigs.order
 
+sigs.encodings <- data.frame(sig = sigs.order, encoding = seq_along(sigs.order) %>% as.numeric())
+write_tsv(sigs.encodings, snakemake@output[['sigs_encodings']])
+
 df.sig.mean <- df.sig.mean %>%
-  slice(order(factor(sample, levels = samples.union))) %>%
+  slice(order(factor(sample, levels = samples.encodings$sample))) %>%
   column_to_rownames("sample") %>%
   select(all_of(sigs.order)) %>%
   mutate_if(is.numeric, scales::rescale) %>%

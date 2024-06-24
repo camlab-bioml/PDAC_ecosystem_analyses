@@ -45,19 +45,22 @@ stan_code <- paste0(
 functions {
   vector get_upper_triangular(matrix m) {
     int K = num_elements(m);
-    print('K = ', K);
-    int L = size(m);
-    print('L = ', L);
-    vector[K-(L*(L+1)%/%2)] v;
+    //print(\"K = \", K);
+    int L = rows(m);
+    //print(\"L = \", L);
+    //print(\"K - (L * (L + 1) / 2) = \", K - (L * (L + 1) %/% 2));
+    vector[K - ( (L*(L+1)) %/% 2 )] v;
     int idx = 1;
     for (i in 1:rows(m)) {
       for (j in 1:cols(m)) {
         if (j > i) {
+          //print(\"m[i, j] = \", m[i, j]);
           v[idx] = m[i, j];
           idx = idx + 1;
         }
       }
     }
+    //print(\"v = \", v);
     return v;
   }
 }
@@ -108,7 +111,7 @@ transformed parameters {
   matrix[L, L] niche_factors_prod;
   niche_factors_prod = tcrossprod(niche_factors); // tcrossprod(x) = xx' = xx^T
 
-  vector<lower = 0>[L*L - (L*(L+1)%/%2)] niche_factors_prod_upper_triangular;
+  vector<lower = 0>[L*L - ( (L*(L+1)) %/% 2 )] niche_factors_prod_upper_triangular;
   niche_factors_prod_upper_triangular = get_upper_triangular(niche_factors_prod);
   
   matrix[P,K] patient_specific_modelled_mu;

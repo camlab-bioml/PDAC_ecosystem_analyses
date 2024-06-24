@@ -7,14 +7,23 @@ suppressPackageStartupMessages({
   library(stringr)
   library(ComplexHeatmap)
   library(clusterProfiler)
+  library(GSEABase)
+  library(fgsea)
   library(enrichplot)
   library(patchwork)
 })
 
-ans.gse <- readRDS(snakemake@input[['gsea_go']])
+# load gene ranks and 3CA pathways
+geneRanks <- readRDS(snakemake@input[['gene_ranks']])
+msig.C4.3ca.list <- readRDS(snakemake@input[['pathways_3ca']])
+
+# load GSEA and ORA results
+ans.gse.GO <- readRDS(snakemake@input[['gsea_go']])
+ans.gse.3ca <- readRDS(snakemake@input[['gsea_3ca']])
 ans.go <- readRDS(snakemake@input[['overrepresentation_go']])
 ans.kegg <- readRDS(snakemake@input[['overrepresentation_kegg']])
 
+# adjust condition and signature.id for different conditions
 condition = snakemake@wildcards[['condition']]
 signature = snakemake@params[['signature']] %>% as.numeric()
 if (condition == "validated") {
@@ -32,8 +41,7 @@ if (condition == "validated") {
 }
 
 # plot GSEA result
-tab.gse <- as.data.frame(ans.gse)
-tab.gse <- tab.gse %>%
+tab.gse <- as.data.frame(ans.gse.GO) %>%
   filter(p.adjust < 0.05) %>%
   arrange(desc(NES))
 
@@ -45,6 +53,16 @@ p <- ggplot(tab.gse[1:20,], aes(x = NES, y = Description, fill = -log(p.adjust))
   labs(title = paste0("Signature ", signature)) +
   scale_y_discrete(labels = function(x) str_wrap(x, width = 40))
 ggsave(snakemake@output[['gsea_go_plot']], p, width = 9, height = 8, units = "in")
+
+# plot fgsea result
+topPathwaysUp <- ans.gse.3ca[ES > 0][head(order(pval), n=10), pathway]
+topPathwaysDown <- ans.gse.3ca[ES < 0][head(order(pval), n=10), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+
+png(snakemake@output[['gsea_3ca_plot']], width = 10, height = 7, units = "in", res = 321)
+plotGseaTable(msig.C4.3ca.list[topPathways], geneRanks, ans.gse.3ca, 
+              gseaParam = 0.5)
+dev.off()
 
 # plot over-representation results
 p1 <- barplot(ans.go, showCategory=10) + ggtitle("GO")

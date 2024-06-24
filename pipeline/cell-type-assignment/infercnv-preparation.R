@@ -15,7 +15,7 @@ sce.normal <- readRDS(snakemake@input[['sce_normal']])
 table(sce.tumor$sample)
 sce.tumor.subsampled <- sce.tumor
 # sce.tumor.subsampled <- sce.tumor[, grepl("CRR241798|CRR034499|CRR034500|CRR034501|CRR034503|CRR034506|CRR034507|CRR034510|CRR034511|CRR034516|CRR034519", sce.tumor$sample)]
-sce.normal <- sce.normal[,sample(colnames(sce.normal), 5000)]
+sce.normal <- sce.normal[,sample(colnames(sce.normal), 3000)]
 table(colData(sce.tumor.subsampled)[[snakemake@params[["celltype_label_field"]]]])
 
 sce.normal$cell_type <- paste0("Normal_", snakemake@wildcards[["celltype"]])

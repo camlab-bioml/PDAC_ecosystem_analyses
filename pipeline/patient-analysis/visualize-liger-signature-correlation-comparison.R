@@ -4,11 +4,15 @@ suppressPackageStartupMessages({
 	library(ggplot2)
 	library(ggpubr)
 	library(ggsci)
+        library(ggrepel)
 	library(viridisLite)
 	library(circlize)
+        library(patchwork)
 })
 
 cell_type_rename <- read_csv(snakemake@input[["cell_type_rename"]])
+
+sig.interpt <- readxl::read_xlsx(snakemake@input[["sig_interpretation"]])
 
 # signatures to remove
 ambient.sigs <- read_csv(snakemake@input[["ambient_sigs"]])$signature
@@ -201,3 +205,123 @@ Reduce(rbind, dfc.for.plot_list) |>
         theme(axis.title = element_text(face = "bold"))
 
 ggsave(snakemake@output[["patient_profiles_correlation_comparison_inter_celltype"]], device = "png", width = 10, height = 5, units = "in", dpi = 321, bg = "white")
+
+# plot signature co-occurrence in discovery vs. validation for each signature
+dfc.list <- readRDS(snakemake@input[["signature_correlation_comparison_data_frame_list"]])
+
+## make sure some signatures with same inpterpretation don't get stacked on each other
+dfc.list <- lapply(dfc.list, function(dfc.sig) {
+  dfc.sig$celltype <- plyr::mapvalues(dfc.sig$celltype, from = cell_type_rename$old_name, cell_type_rename$new_name)
+  dfc.sig$signature <- plyr::mapvalues(dfc.sig$signature, 
+                                         from = sig.interpt$signature, 
+                                         to = sig.interpt$`short interpretation`,
+                                       warn_missing = FALSE)
+  dfc.sig |> 
+    filter(!grepl("Ambient RNA|^MALAT1/NEAT1$", signature)) |>
+    group_by(signature) |>
+    mutate(unique_signature = paste0(signature, "_-_", row_number())) |>
+    ungroup() |>
+    arrange(desc(correlation_discovery))
+})
+
+## draw some bar/scatter plots
+individual_plot_dir <- snakemake@params[["sig_cooccurring_plot_dir"]]
+
+lapply(names(dfc.list), function(sig) {
+  if(nrow(dfc.list[[sig]]) == 0) {
+    return()
+  }
+  dfc.sig <- dfc.list[[sig]] |>
+    mutate(sig.of.interest = ifelse(((abs(correlation_discovery) > 0.29 | abs(correlation_validation) > 0.29) & 
+                                       abs(correlation_discovery - correlation_validation) <= 0.25), signature, NA))
+  plot.title <- sig.interpt |> filter(signature == sig) |> pull(`short interpretation`)
+  plot.title <- paste0(plyr::mapvalues(gsub(" [0-9]$| [0-9][0-9]$", "", sig), 
+                                       from = cell_type_rename$old_name, to = cell_type_rename$new_name, warn_missing = FALSE), ": ", plot.title)
+  
+  p1 <- ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_discovery)) +
+    geom_bar(stat = "identity", aes(fill = celltype, alpha = `validation confidence`)) +
+    scale_fill_manual(values = celltype_pal_to_use) +
+    labs(title = plot.title, x = NULL, y = "Co-occurrence in discovery") +
+    theme_pubr() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+    theme(axis.text.x = element_blank(),
+          plot.margin = margin(l = 0 + 200))
+  
+  p2 <- ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_validation)) +
+    geom_bar(stat = "identity", aes(fill = celltype, alpha = `validation confidence`)) +
+    scale_x_discrete(labels = dfc.sig$signature) + 
+    scale_fill_manual(values = celltype_pal_to_use) +
+    labs(x = NULL, y = "Co-occurrence in validation") +
+    theme_pubr() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          plot.margin = margin(l = 0 + 200))
+  p1 / p2 + plot_layout(guides = "collect") &
+    theme(legend.position='top')
+  ggsave(paste0(individual_plot_dir, sig, "-cooccur-bar.png"), width = 18, height = 15, units = "in", dpi = 360)
+  
+  ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_discovery)) +
+    geom_bar(stat = "identity", aes(alpha = `validation confidence`)) +
+    scale_x_discrete(labels = dfc.sig$signature) + 
+    labs(title = plot.title, x = NULL, y = "Co-occurrence in discovery") +
+    theme_pubr() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          plot.margin = margin(l = 0 + 200))
+  ggsave(paste0(individual_plot_dir, sig,"-cooccur-bar-no-color.png"), width = 18, height = 10, units = "in", dpi = 360)
+  
+  ggplot(dfc.sig, aes(x = correlation_discovery, y = correlation_validation, label = sig.of.interest, fill = celltype, color = celltype)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+    geom_point(aes(fill = celltype, color = celltype), size = 4) +
+    geom_label_repel(show.legend = F, max.overlaps = 20, alpha = 1, colour = "black", 
+                     arrow = arrow(type = "closed", angle = 20, length = unit(0.08, "inches"))) +
+    scale_fill_manual(values = celltype_pal_to_use) + 
+    scale_color_manual(values = celltype_pal_to_use) +
+    labs(title = plot.title,
+         x = "Correlation in discovery",
+         y = "Correlation in validation",
+         color = "Cell type") + 
+    theme_pubr() +
+    theme(axis.title = element_text(size = 16, face = "bold"),
+          title = element_text(face = "bold")) + 
+    guides(fill = "none")
+  ggsave(paste0(individual_plot_dir, sig, "-cooccur-scatter.png"), width = 8, height = 8, units = "in", dpi = 360)
+})
+
+# plot general signature co-occurrence agreement between discovery an validation
+dis.val.agree <- read_tsv(snakemake@input[["signature_cooccurrence_agreement_data_frame"]])
+
+dis.val.agree <- dis.val.agree |>
+  mutate(celltype = plyr::mapvalues(celltype, from = cell_type_rename$old_name, to = cell_type_rename$new_name)) |>
+  mutate(signature = plyr::mapvalues(signature, from = sig.interpt$signature, to = sig.interpt$`short interpretation`))
+
+dis.val.agree <- dis.val.agree |> 
+  filter(!grepl("Ambient RNA|^MALAT1/NEAT1$", signature)) |>
+  group_by(signature) |>
+  mutate(unique_signature = paste0(signature, "_-_", row_number())) |>
+  ungroup() |>
+  arrange(desc(dis_val_corr))
+
+margin_spacer <- function(x) {
+  # where x is the column in your dataset
+  #left_length <- nchar(levels(factor(x)))[1]
+  left_length <- nchar(x)[1]
+  if (left_length > 8) {
+    return((left_length - 8) * 4)
+  }
+  else
+    return(0)
+}
+
+ggplot(dis.val.agree, aes(x = reorder(unique_signature, -dis_val_corr), y = dis_val_corr)) +
+  geom_bar(stat = "identity", aes(fill = celltype)) +
+  ylim(0, NA) +
+  scale_x_discrete(labels = dis.val.agree$signature) + 
+  scale_fill_manual(values = celltype_pal_to_use) +
+  labs(x = NULL, y = "Correlation of co-occurrence between discovery and validation") +
+  geom_text(aes(label = ifelse(p_value < 0.01, "*", "")), 
+            position = position_dodge(width = .9), vjust = -.1, size = 20 / .pt) +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        #plot.margin = margin(l = 0 + margin_spacer(dis.val.agree$signature))
+        plot.margin = margin(l = 0 + 32))
+ggsave(snakemake@output[["signature_cooccurrence_agreement_plot"]], width = 18, height =8, units = "in", dpi = 360)

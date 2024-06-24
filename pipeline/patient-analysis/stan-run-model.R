@@ -70,9 +70,11 @@ nmf.niches <- NMF::nmf(x = as.matrix(df.sig.mean), rank = number.of.niches, meth
 params.init.value.list[["niche_loadings"]] <- nmf.niches@fit@W
 params.init.value.list[["niche_factors"]] <- nmf.niches@fit@H
 
+saveRDS(params.init.value.list, snakemake@output[['params_init_value_list']])
+
 fit.optim <- model$optimize(
   data = stan.data,
-  refresh = ceiling(nIter/20),
+  refresh = ceiling(nIter/100),
   init = list(
     params.init.value.list
   ),

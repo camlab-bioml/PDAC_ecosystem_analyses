@@ -9,10 +9,19 @@ suppressPackageStartupMessages({
   library(patchwork)
   library(cowplot)
   library(circlize)
+  library(scales)
 })
 
 celltypes <- snakemake@params[['celltypes']]
 print(celltypes)
+
+# load gene loading matrices
+gene.loading.df.list <- lapply(celltypes, function(ct) {
+  gene.loading.mtx.path <- grep(ct, snakemake@input[['gene_loading_mtx']], value = TRUE)[1]
+  df <- read_tsv(gene.loading.mtx.path)
+  df
+})
+names(gene.loading.df.list) <- celltypes
 
 # load signature loading matrices
 sig.loading.mtx.list <- lapply(celltypes, function(ct) {
@@ -144,3 +153,99 @@ sig.loading.mean.mtx.df <- Reduce(function(d1, d2) full_join(d1, d2, by = c("coh
 
 write_tsv(sig.loading.median.mtx.df, snakemake@output[['sig_loading_median_mtx']])
 write_tsv(sig.loading.mean.mtx.df, snakemake@output[['sig_loading_mean_mtx']])
+
+# how many sigs are left after validation and merging?
+patient.collapsed.profiles.df <- read_tsv(snakemake@input[['patient_profiles_collapsed']])
+patient.discovery.profiles.df <- read_tsv(snakemake@input[['patient_profiles_discovery']])
+patient.validated.profiles.df <- read_tsv(snakemake@input[['patient_profiles_validated']])
+
+sig.number.list <- list(
+  Discovery = patient.discovery.profiles.df,
+  Validated = patient.validated.profiles.df,
+  Collapsed = patient.collapsed.profiles.df
+)
+
+sig.number.list <- lapply(sig.number.list, function(df) {
+  data.frame (signature = names(df)[3:length(df)]) |>
+    mutate(cell_type = gsub(" [0-9]$| Rep [0-9]$", "", signature)) |> 
+    mutate(cell_type = gsub(" [0-9][0-9]$| Rep [0-9][0-9]$", "" , cell_type)) |>
+    dplyr::count(cell_type)
+})
+
+sig.number.df <- left_join(sig.number.list$Discovery, sig.number.list$Validated, by = "cell_type", suffix = c("_Discovery", "_Validated"))
+sig.number.df <- left_join(sig.number.df, sig.number.list$Collapsed, by = "cell_type")
+names(sig.number.df) <- plyr::mapvalues(names(sig.number.df), from = c("n"), to = c("n_Merged"))
+
+sig.number.df <- sig.number.df |>
+  pivot_longer(starts_with("n_"), names_to = "Condition", values_to = "Number") |>
+  mutate(Condition = factor(gsub("n_", "", Condition), levels = c("Discovery", "Validated", "Merged")))
+
+saveRDS(sig.number.df, snakemake@output[['sig_number']])
+
+# top markers for specific signatures
+genes.unwanted <- c("MALAT1", "HEAT1", "XIST")
+
+gene.loading.df.list <- lapply(gene.loading.df.list, function(gene.loading.df) {
+  gene.loading.df %>%
+    distinct(gene, .keep_all = TRUE) %>%
+    filter(!(gene %in% genes.unwanted)) %>%
+    column_to_rownames("gene")
+})
+
+top.gene.list <- lapply(gene.loading.df.list, function(gene.loading.df) {
+  lapply(gene.loading.df, function(sig) {
+    rownames(gene.loading.df)[sort(sig, index.return = TRUE, decreasing = TRUE)$ix[1:as.numeric(snakemake@params[['num_top_genes_to_show']])]]
+  })
+})
+
+gene.loading.top.gene.df.list <- lapply(celltypes, function(ct) {
+  gene.loading.df <- gene.loading.df.list[[ct]]
+  top.genes <- Reduce(union, top.gene.list[[ct]])
+  
+  as.matrix(gene.loading.df)[top.genes,]
+})
+names(gene.loading.top.gene.df.list) <- celltypes
+
+
+gene.loading.top.gene.df.to.plot.list <- list() 
+
+# select signatures from epithelial cells
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`pancreatic epithelial cell` %>% t() %>% rescale() %>% t()
+
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.to.plot[Reduce(union,
+                                                                            list(top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 4`,
+                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 7`,
+                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 11`,
+                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 12`,
+                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 15`)),
+                                                                     c(4, 7, 11, 12, 15)]
+
+gene.loading.top.gene.df.to.plot.list[['pancreatic epithelial cell']] <- gene.loading.top.gene.df.to.plot
+
+# select signatures from fibroblasts
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$fibroblast %>% t() %>% rescale() %>% t()
+
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.to.plot[Reduce(union, 
+                                                                            list(top.gene.list$fibroblast$`fibroblast Rep 2`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 4`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 6`,
+                                                                                 top.gene.list$fibroblast$`fibroblast Rep 8`)),
+                                                                     c(2, 4, 6, 8)]
+
+gene.loading.top.gene.df.to.plot.list[['fibroblast']] <- gene.loading.top.gene.df.to.plot
+
+# select signatures from CD8 T/NK cells
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`CD8-positive, alpha-beta T cell` %>% t() %>% rescale() %>% t()
+
+gene.loading.top.gene.df.to.plot <- 
+  gene.loading.top.gene.df.to.plot[Reduce(union, 
+                                          list(top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 2`,
+                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 4`,
+                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 7`,
+                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 9`,
+                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 10`)),
+                                   c(2, 4, 7, 9, 10)]
+
+gene.loading.top.gene.df.to.plot.list[['CD8-positive, alpha-beta T cell']] <- gene.loading.top.gene.df.to.plot
+
+saveRDS(gene.loading.top.gene.df.to.plot.list, snakemake@output[['selected_sig_top_gene_loading_mtx_list']])
