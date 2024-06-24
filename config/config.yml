@@ -1,5 +1,7 @@
 version: 'v3'
 
+RPATH: '/usr/bin/local/R'
+
 data:
   sce: 'data/sces/pipeline-output/'
   doublet_detection_results: 'data/doublet-detection/'
@@ -55,22 +57,35 @@ visualize_these_cohorts_together: 'resources/cell-type-assignment/combined_visua
 figure1:
   make_figure1: TRUE
   cell_type_rename_csv: "resources/cell-type-assignment/cell_types_to_rename_for_plot.csv"
+  cell_type_pallete_to_use: "Dark2"
+  schematic_plot: "resources/schematic_plot.pdf"
   metadata_plot_width: 15
   metadata_plot_height: 5
   dim_red_plot: "seuratUMAP"
-  umap_plot_width: 15
+  umap_plot_width: 18
   umap_plot_height: 15
   stacked_bar_plot_width: 10
   stacked_bar_plot_height: 15
-  figure1_width: 20
-  figure1_height: 15
+  marker_dot_plot_width: 18
+  marker_dot_plot_height: 7
+  figure1_width: 15
+  figure1_height: 21
 
 figure2:
   make_figure2: TRUE
   sig_interpretation: "resources/cell-type-signature/signature-analysis/signature_interpretation.xlsx"
   ambient_sigs: "resources/cell-type-signature/signature-analysis/ambient_sigs.csv"
-  figure2_b_width: 22
-  figure2_b_height: 25
+  num_top_genes_to_show: 10
+  figure2_a_width: 8
+  figure2_a_height: 5
+  figure2_b_width: 8
+  figure2_b_height: 6
+  figure2_c_width: 22
+  figure2_c_height: 25
+  figure2_d_width: 10
+  figure2_d_height: 12
+  figure2_width: 20
+  figure2_height: 15
 
 liger:
   celltypes_for_signature: "resources/cell-type-signature/signature-extraction/cell_types_for_signature.csv"
@@ -98,6 +113,7 @@ signatures:
   cohort_correct_weight: 1
   known_signature_markers_dir: 'resources/markers/known-signature-markers/'
   known_signature_markers_file_pattern: '_list.csv'
+  gsea_msigdb_dir: 'resources/cell-type-signature/signature-analysis/msigdb_v2023.2.Hs_files_to_download_locally/msigdb_v2023.2.Hs_GMTs/'
   num_top_genes_for_overlap_test: 50 # from Hwang paper?
   pvalue_cutoff_for_overlap_test: 0.05
   gsea_maxGSSize: 500
@@ -106,6 +122,20 @@ signatures:
   sig_activation_threshold_quantile: 0.75
   get_sig_loading_profiles: TRUE
   signature_profile_flavours: "resources/cell-type-signature/signature-analysis/signature_profile_flavours.csv"
+  sig_loading_pattern_dimred_to_plot: "TSNE_on_seuratPCA"
+
+figure3:
+  make_figure3: TRUE
+  figure3_a_width: 8
+  figure3_a_height: 5
+  figure3_b_width: 8
+  figure3_b_height: 5
+  #figure3_c_width: 10
+  #figure3_c_height: 5
+  #figure3_d_width: 10
+  #figure3_d_height: 5
+  figure3_width: 11
+  figure3_height: 9
 
 patient_profiles:
   build_patient_profiles: TRUE
@@ -113,17 +143,83 @@ patient_profiles:
   compare_collapsed_and_rescored_validation_per_cohort: TRUE
   signature_correlation_comparison: TRUE
 
+figure4:
+  make_figure4: TRUE
+  schematic_plot: "resources/coocurrence_schematic.pdf"
+  figure4_a_width: 8
+  figure4_a_height: 5
+  figure4_b_width: 5.5
+  figure4_b_height: 6.5
+  figure4_c_width: 10
+  figure4_c_height: 5
+  figure4_d_width: 10
+  figure4_d_height: 5
+  figure4_e_width: 18
+  figure4_e_height: 8
+  figure4_f_width: 16
+  figure4_f_height: 8
+  figure4_width: 20
+  figure4_height: 12
+
 stan:
   run_stan: TRUE
   stan_ct_config: 'resources/stan/stan_celltypes.csv'
   stan_param_config: 'resources/stan/stan_parameters.csv'
   #number_of_niches: 4
   min_number_of_cells_per_sample: 20
-  max_number_of_cells_per_sample: 1000
+  max_number_of_cells_per_sample: 1500
   stan_model_basename: 'version-2'
   nReps: 5
   #nIter: 1000
   nWarmup: 500
   nChains: 4
   treeDepth: 15
-  lambda_for_orthogonality: 1000
+  lambda_for_orthogonality: 200
+
+zhou:
+  run_zhou: TRUE
+  clinical_data: 'resources/zhou/Zhou_patient_clinical_data.csv'
+  meta_data: 'resources/zhou/Zhou_sample_meta_data.csv'
+
+figure5:
+  make_figure5: TRUE
+  schematic_plot: "resources/model_schematic.pdf"
+  panel_d: "resources/Figure_5_D.pdf"
+  panel_e: "resources/Figure_5_E.pdf"
+  cov_celltype_to_plot: "fibroblast"
+  figure5_a_width: 8
+  figure5_a_height: 5
+  figure5_b_width: 18
+  figure5_b_height: 10
+  figure5_c_width: 8
+  figure5_c_height: 7
+  figure5_d_width: 8
+  figure5_d_height: 5
+  figure5_e_width: 8
+  figure5_e_height: 5
+  figure5_width: 15
+  figure5_height: 14
+
+survival:
+  run_survival_analysis: TRUE
+  paad_mrna_data: 'resources/survival-analysis/exprs/tcga/TCGA_rse_v2.rds'
+  paad_sample_list: 'resources/survival-analysis/exprs/tcga/cancers-411370-Table S1.xlsx'
+  tcga_clin_data: 'resources/survival-analysis/clin/tcga/NIHMS978596-supplement-1.xlsx'
+  tcga_purist_subtype_calls: 'resources/survival-analysis/clin/tcga/Purist-TCGA-moffitt-calls.csv'
+  compass_clin_data: 'resources/survival-analysis/clin/toronto/COMPASS_clean.tsv'
+  toronto_bulk_data: "resources/survival-analysis/exprs/toronto/sce_pcsi_added_annot.rds"
+  toronto_subtype_calls: "resources/survival-analysis/clin/toronto/RNA_subtype_V3_allsample.tsv"
+  toronto_meta_data: "resources/survival-analysis/clin/toronto/frozen_clinical.csv"
+  pancurx_ihc_data: "resources/survival-analysis/clin/toronto/210714_Gruenwald_IHC_stain_quantification.csv"
+  score_used_for_clinical_association: "mean" # mean, gsva
+
+figure6:
+  make_figure6: TRUE
+  figure6_a_width: 8
+  figure6_a_height: 5
+  figure6_b_width: 22
+  figure6_b_height: 25
+  figure6_c_width: 12
+  figure6_c_height: 10
+  figure6_width: 24
+  figure6_height: 18
