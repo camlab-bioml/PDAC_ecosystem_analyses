@@ -34,16 +34,35 @@ rule visualize_liger_signature_top_gene_loading_analysis_disval:
 rule liger_signature_top_gene_loading_analysis:
 	input:
 		gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-{condition}.tsv',
+		sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-{condition}.tsv',
+		sce_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-discovery.rds',
+		sce_val = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-validation.rds',
 	params:
 		num_top_genes = config['signatures']['num_top_genes'],
 	output:
 		sig_top_gene_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-{condition}.tsv',
 		sig_top_gene_tsv = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-{condition}.tsv',
+		sig_top_gene_analysis_df = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-analysis-{condition}.tsv',
 	resources:
-		mem_mb = 1000
+		mem_mb = 10000
 	threads: 1
 	script:
 		'signature-analysis/liger-signature-top-gene-loading-analysis.R'
+
+rule liger_signature_top_gene_loading_analysis_combine_and_rename_sigs:
+	input:
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		sig_top_gene_analysis_df = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-analysis-' + wildcards.condition + '.tsv', subtype = ct_extract),
+	params:
+		celltypes = ct_extract,
+	output:
+		sig_top_gene_analysis_df_combined = resultoutput + 'LIGER/signature-analysis/signature-top-gene-analysis-combined-{condition}.tsv',
+	resources:
+		mem_mb = 10000
+	threads: 1
+	script:
+		'signature-analysis/liger-signature-top-gene-loading-analysis-combine-and-rename-sigs.R'
 
 rule visualize_liger_signature_top_gene_loading_analysis:
 	input:
@@ -144,10 +163,14 @@ rule liger_signature_enrichment_analysis:
 	params:
 		signature = '{k}',
 		gsea_maxGSSize = config['signatures']['gsea_maxGSSize'],
+		gsea_msigdb_dir = config['signatures']['gsea_msigdb_dir'],
 	output:
+		gene_ranks = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/gene-ranks/{condition}/{subtype}-signature-{k}-gene-ranks-{condition}.rds',
 		overrepresentation_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-GO.rds',
 		overrepresentation_kegg = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-KEGG.rds',
 		gsea_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-GO.rds',
+		gsea_3ca = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-3CA.rds',
+		pathways_3ca = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/pathways/{condition}/{subtype}-signature-{k}-pathways-3CA.rds',
 	resources:
 		mem_mb = 8000
 	threads: 4
@@ -159,6 +182,9 @@ rule visualize_liger_signature_enrichment_analysis:
 		overrepresentation_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-GO.rds',
 		overrepresentation_kegg = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-KEGG.rds',
 		gsea_go = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-GO.rds',
+		gsea_3ca = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-3CA.rds',
+		gene_ranks = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/gene-ranks/{condition}/{subtype}-signature-{k}-gene-ranks-{condition}.rds',
+		pathways_3ca = resultoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/pathways/{condition}/{subtype}-signature-{k}-pathways-3CA.rds',
 		gene_loading_mtx_validated = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-validated.tsv',
 		gene_loading_mtx_collapsed = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed.tsv',
 		gene_loading_mtx_collapsed_scored_validation = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-collapsed-scored-validation.tsv',
@@ -168,6 +194,7 @@ rule visualize_liger_signature_enrichment_analysis:
 		overrepresentation_go_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-GO.png',
 		overrepresentation_kegg_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/overrepresentation-analysis/{condition}/{subtype}-signature-{k}-overrepresentation-KEGG.png',
 		gsea_go_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-GO.png',
+		gsea_3ca_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/enrichment-analysis/GSEA/{condition}/{subtype}-signature-{k}-GSEA-3CA.png',
 	resources: 
 		mem_mb = 1000
 	threads: 1
@@ -272,6 +299,8 @@ rule extract_liger_signature_loading_profiles:
 
 rule visualize_liger_signature_loading_profiles:
 	input:
+		cohort_pal = figureoutput + 'cohort-palette.rds',
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
 		sig_profiles = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-profiles/{condition}/{subtype}-signature-loading-profiles-{profile}-{condition}.tsv',
 	params:
 		
@@ -284,12 +313,54 @@ rule visualize_liger_signature_loading_profiles:
 	script:
 		'signature-analysis/visualize-liger-signature-loading-profiles.R'
 
+rule liger_signature_loading_patterns_analysis:
+	input:
+		sig_loading_top_two = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-analysis/{condition}/{subtype}-signature-loading-top-two-{condition}.tsv',
+		sce_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-discovery.rds',
+		sce_val = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-validation.rds',
+	params:
+		dim_red_plot = config['signatures']['sig_loading_pattern_dimred_to_plot'],
+	output:
+		dimred_with_top_two_sig_loadings = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-patterns/{condition}/{subtype}-signature-loading-patterns-dimred-with-top-two-sig-loadings-{condition}.tsv',
+	resources:
+		mem_mb = 20000
+	threads: 8
+	script:
+		'signature-analysis/liger-signature-loading-patterns-analysis.R'
+
+rule visualize_liger_signature_loading_patterns:
+	input:
+		dimred_with_top_two_sig_loadings = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-patterns/{condition}/{subtype}-signature-loading-patterns-dimred-with-top-two-sig-loadings-{condition}.tsv',
+		sig_loading_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-{condition}.tsv',
+		sig_profiles = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-profiles/{condition}/{subtype}-signature-loading-profiles-{profile}-{condition}.tsv',
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		ambient_sigs = config['figure2']['ambient_sigs'],
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+	params:
+		dim_red_plot = config['signatures']['sig_loading_pattern_dimred_to_plot'],
+	output:
+		top_two_sigs_umap = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-patterns/{condition}/{subtype}-top-two-sigs-umap-{profile}-{condition}.png',
+		sig_loading_pattern_umap = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-patterns/{condition}/{subtype}-signature-loading-patterns-umap-{profile}-{condition}.png',
+		sig_loading_pattern_corrplot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-patterns/{condition}/pattern-correlations/{subtype}-signature-loading-patterns-{profile}-correlation-{condition}.png',
+		sig_loading_pattern_single_cell_corrplot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-patterns/{condition}/pattern-correlations/{subtype}-signature-loading-patterns-single-cell-{profile}-correlation-{condition}.png',
+	resources:
+		mem_mb = 20000
+	threads: 2
+	script:
+		'signature-analysis/visualize-liger-signature-loading-patterns.R'
+
 rule figure_2_preparation:
 	input:
+		patient_profiles_discovery = resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/discovery/loading-median/patient-{compartment}-signature-profiles-loading-median-discovery.tsv',
+		patient_profiles_validated = resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/validated/loading-median/patient-{compartment}-signature-profiles-loading-median-validated.tsv',
+		patient_profiles_collapsed = resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/collapsed/loading-median/patient-{compartment}-signature-profiles-loading-median-collapsed.tsv',
 		sig_loading_mtx = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-' + wildcards.condition + '.tsv', subtype = list(ct_for_patient_profile[wildcards.compartment])),
+		gene_loading_mtx = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-' + wildcards.condition + '.tsv', subtype = list(ct_for_patient_profile[wildcards.compartment])),
 	params:
 		celltypes = lambda wildcards: list(ct_for_patient_profile[wildcards.compartment]),
+		num_top_genes_to_show = config['figure2']['num_top_genes_to_show'],
 	output:
+		sig_number = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/signature-number-df-{condition}.rds',
 		sig_loading_mtx_metadata = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-metadata-{condition}.rds',
 		sig_loading_mtx_scaled = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-scaled-{condition}.rds',
 		sig_loading_var_mtx = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-variance-matrix-{condition}.rds',
@@ -297,6 +368,7 @@ rule figure_2_preparation:
 		sig_loading_ncell = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-ncell-{condition}.rds',
 		sig_loading_median_mtx = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-median-matrix-{condition}.tsv',
 		sig_loading_mean_mtx = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/signature-loading-mean-matrix-{condition}.tsv',
+		selected_sig_top_gene_loading_mtx_list = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/{condition}/selected-signature-top-gene-loading-mtrices-{condition}.rds',
 	resources:
 		mem_mb = 1000
 	threads: 1
@@ -309,17 +381,74 @@ rule draw_figure_2:
 		cell_type_rename = config['figure1']['cell_type_rename_csv'],
 		sig_interpretation = config['figure2']['sig_interpretation'],
 		ambient_sigs = config['figure2']['ambient_sigs'],
+		sig_number = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/signature-number-df-collapsed.rds',
 		sig_loading_var_dis = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed/signature-loading-variance-collapsed.tsv',
 		sig_loading_var_val = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed-scored-validation/signature-loading-variance-collapsed-scored-validation.tsv',
 		sig_loading_median_mtx_dis = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed/signature-loading-median-matrix-collapsed.tsv',
 		sig_loading_median_mtx_val = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed-scored-validation/signature-loading-median-matrix-collapsed-scored-validation.tsv',
+		selected_sig_top_gene_loading_mtx_list = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed/selected-signature-top-gene-loading-mtrices-collapsed.rds',
+		gene_loading_corr = resultoutput + 'LIGER/signature-analysis/fibroblast/signature-validation/fibroblast-gene-loading-corr.tsv',
+		gene_loading_dist = resultoutput + 'LIGER/signature-analysis/fibroblast/signature-validation/fibroblast-gene-loading-dist.tsv',
+		validated_sig_df = resultoutput + 'LIGER/signature-analysis/fibroblast/signature-validation/fibroblast-validated-signatures-hungarian-method.tsv',
 	params:
+		figure2_a_width = config['figure2']['figure2_a_width'],
+		figure2_a_height = config['figure2']['figure2_a_height'],
 		figure2_b_width = config['figure2']['figure2_b_width'],
 		figure2_b_height = config['figure2']['figure2_b_height'],
+		figure2_c_width = config['figure2']['figure2_c_width'],
+		figure2_c_height = config['figure2']['figure2_c_height'],
+		figure2_d_width = config['figure2']['figure2_d_width'],
+		figure2_d_height = config['figure2']['figure2_d_height'],
+		figure2_width = config['figure2']['figure2_width'],
+		figure2_height = config['figure2']['figure2_height'],
 	output:
+		figure2_a = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-a-{compartment}.png',
 		figure2_b = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-b-{compartment}.png',
+		figure2_c = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-c-{compartment}.png',
+		figure2_d = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-d-{compartment}.png',
+		figure2_png = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-{compartment}.png',
+		figure2_pdf = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-{compartment}.pdf',
 	resources:
 		mem_mb = 1000
 	threads: 1
 	script:
 		'signature-analysis/draw-figure-2.R'
+
+rule figure_3_preparation:
+	input:
+		sig_loading_var_dis = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed/signature-loading-variance-collapsed.tsv',
+		sig_loading_var_val = resultoutput + 'LIGER/signature-analysis/figure-2/{compartment}/collapsed-scored-validation/signature-loading-variance-collapsed-scored-validation.tsv',
+	params:
+		celltypes = lambda wildcards: list(ct_for_patient_profile[wildcards.compartment]),
+	output:
+		sig_loading_var_dis_val = resultoutput + 'LIGER/signature-analysis/figure-3/{compartment}/signature-loading-variance-dis-val.tsv',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/figure-3-preparation.R'
+
+rule draw_figure_3:
+	input:
+		cohort_pal = figureoutput + 'cohort-palette.rds',
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		ambient_sigs = config['figure2']['ambient_sigs'],
+		sig_loading_var_dis_val = resultoutput + 'LIGER/signature-analysis/figure-3/{compartment}/signature-loading-variance-dis-val.tsv',
+	params:
+		figure3_a_width = config['figure3']['figure3_a_width'],
+		figure3_a_height = config['figure3']['figure3_a_height'],
+		figure3_b_width = config['figure3']['figure3_b_width'],
+		figure3_b_height = config['figure3']['figure3_b_height'],
+		figure3_width = config['figure3']['figure3_width'],
+		figure3_height = config['figure3']['figure3_height'],
+	output:
+		figure3_a = figureoutput + 'LIGER/signature-analysis/figure-3/{compartment}/figure-3-a-{compartment}.png',
+		figure3_b = figureoutput + 'LIGER/signature-analysis/figure-3/{compartment}/figure-3-b-{compartment}.png',
+		figure3_png = figureoutput + 'LIGER/signature-analysis/figure-3/{compartment}/figure-3-{compartment}.png',
+		figure3_pdf = figureoutput + 'LIGER/signature-analysis/figure-3/{compartment}/figure-3-{compartment}.pdf',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/draw-figure-3.R'

@@ -61,6 +61,7 @@ rule visualize_liger_signature_validation_alternative_methods:
 	output:
 		gene_loading_corr_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-corr-hungarian-method.png',
 		gene_loading_dist_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-dist-hungarian-method.png',
+		gene_loading_corr_and_dist_plot = figureoutput + 'LIGER/signature-analysis/{subtype}/signature-validation/{subtype}-gene-loading-corr-and-dist-hungarian-method.png',
 	resources:
 		mem_mb = 1000
 	threads: 1

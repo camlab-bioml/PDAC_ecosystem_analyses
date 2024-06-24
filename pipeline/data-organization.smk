@@ -56,6 +56,7 @@ rule figure_1_preparation:
 	input:
 		sces = lambda wildcards: expand(dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-' + wildcards.group + '.rds', subtype = ct_extract),
 	params:
+		rpath = config['RPATH'],
 		cohorts_discovery = discovery_cohorts,
 		cohorts_validation = validation_cohorts,
 		celltypes = ct_extract,
@@ -73,6 +74,7 @@ rule figure_1_preparation:
 rule draw_figure_1:
 	input:
 		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		schematic = config['figure1']['schematic_plot'],
 		metadata_dis = resultoutput + 'cohort-discovery-validation-grouping/figure-1/metadata-discovery.tsv',
 		dimred_dis = resultoutput + 'cohort-discovery-validation-grouping/figure-1/dimred-discovery.tsv',
 		metadata_val = resultoutput + 'cohort-discovery-validation-grouping/figure-1/metadata-validation.tsv',
@@ -80,6 +82,7 @@ rule draw_figure_1:
 		sce_dis = dataoutput + 'cohort-discovery-validation-grouping/figure-1/sce-prepared-discovery.rds',
 		sce_val = dataoutput + 'cohort-discovery-validation-grouping/figure-1/sce-prepared-validation.rds',
 	params:
+		cell_type_pallete = config['figure1']['cell_type_pallete_to_use'],
 		cohorts_discovery = discovery_cohorts,
 		cohorts_validation = validation_cohorts,
 		metadata_plot_width = config['figure1']['metadata_plot_width'],
@@ -88,14 +91,18 @@ rule draw_figure_1:
   		umap_plot_height = config['figure1']['umap_plot_height'],
 		stacked_bar_plot_width = config['figure1']['stacked_bar_plot_width'],
 		stacked_bar_plot_height = config['figure1']['stacked_bar_plot_height'],
+		marker_dot_plot_width = config['figure1']['marker_dot_plot_width'],
+		marker_dot_plot_height = config['figure1']['marker_dot_plot_height'],
   		figure1_width = config['figure1']['figure1_width'],
   		figure1_height = config['figure1']['figure1_height'],
 	output:
 		cohort_pal = figureoutput + 'cohort-palette.rds',
 		celltype_pal = figureoutput + 'celltype-palette.rds',
+		figure1_a = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1-A.png',
 		figure1_c = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1-C.png',
 		figure1_d = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1-D.png',
 		figure1_e = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1-E.png',
+		figure1_f = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1-F.png',
 		figure1_png = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1.png',
 		figure1_pdf = figureoutput + 'cohort-discovery-validation-grouping/figure-1/figure-1.pdf',
 	resources:
