@@ -122,6 +122,19 @@ rule visualize_liger_signature_correlation_comparison:
 	script:
 		'patient-analysis/visualize-liger-signature-correlation-comparison.R'
 
+rule visualize_lige_signature_gene_expression_analysis:
+	input:
+		patient_profiles_correlation_data_frame = resultoutput + 'LIGER/patient-analysis/signature-correlation-comparison/{profile}/patient-{compartment}-signature-profiles-{profile}-correlation-data-frame.tsv',
+		sig_gene_expr_mtx_dis = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-expression-analysis/{condition}/{subtype}-signature-gene-expression-collapsed.tsv',
+		sig_gene_expr_mtx_val = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-expression-analysis/{condition}/{subtype}-signature-gene-expression-collapsed-scored-validation.tsv',
+	params:
+	output:
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'patient-analysis/visualize-liger-signature-gene-expression-analysis.R'
+
 rule figure_4_preparation:
 	input: 
 		patient_profiles_correlation_data_frame = resultoutput + 'LIGER/patient-analysis/signature-correlation-comparison/{profile}/patient-{compartment}-signature-profiles-{profile}-correlation-data-frame.tsv',

@@ -349,6 +349,21 @@ rule visualize_liger_signature_loading_patterns:
 	script:
 		'signature-analysis/visualize-liger-signature-loading-patterns.R'
 
+rule liger_signature_gene_expression_analysis:
+	input:
+		sig_loading_top_two = resultoutput + 'LIGER/signature-analysis/{subtype}/signature-loading-analysis/{condition}/{subtype}-signature-loading-top-two-{condition}.tsv',
+		sce_dis = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-discovery.rds',
+		sce_val = dataoutput + 'cohort-discovery-validation-grouping/{subtype}/scRNASeq-{subtype}-sce-validation.rds',
+	params:
+		#genes_to_show = config['signatures']['genes_exprs_to_show'],
+	output:
+		sig_gene_expr_mtx = resultoutput + 'LIGER/signature-analysis/{subtype}/gene-expression-analysis/{condition}/{subtype}-signature-gene-expression-{condition}.tsv',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'signature-analysis/liger-signature-gene-expression-analysis.R'
+
 rule figure_2_preparation:
 	input:
 		patient_profiles_discovery = resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/discovery/loading-median/patient-{compartment}-signature-profiles-loading-median-discovery.tsv',
@@ -403,7 +418,8 @@ rule draw_figure_2:
 		figure2_height = config['figure2']['figure2_height'],
 	output:
 		figure2_a = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-a-{compartment}.png',
-		figure2_b = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-b-{compartment}.png',
+		figure2_b_png = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-b-{compartment}.png',
+		figure2_b_pdf = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-b-{compartment}.pdf',
 		figure2_c = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-c-{compartment}.png',
 		figure2_d = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-d-{compartment}.png',
 		figure2_png = figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-{compartment}.png',

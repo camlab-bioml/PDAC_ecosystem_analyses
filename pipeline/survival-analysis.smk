@@ -136,6 +136,8 @@ rule draw_figure_6:
 		figure6_width = config['figure6']['figure6_width'],
 		figure6_height = config['figure6']['figure6_height'],
 	output:
+		figure6_a = figureoutput + 'LIGER/survival-analysis/figure-6/figure-6-a.png',
+		figure6_b = figureoutput + 'LIGER/survival-analysis/figure-6/figure-6-b.png',
 		figure6_png = figureoutput + 'LIGER/survival-analysis/figure-6/figure-6.png',
 		figure6_pdf = figureoutput + 'LIGER/survival-analysis/figure-6/figure-6.pdf',
 	resources:
