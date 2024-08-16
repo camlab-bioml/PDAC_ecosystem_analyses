@@ -54,7 +54,7 @@ write_tsv(dfc.for.plot.inter, snakemake@output[['patient_profiles_correlation_da
 # for plotting two examples of signature co-occurrance across cell types
 dfc.list <- readRDS(snakemake@input[["signature_correlation_comparison_data_frame_list"]])
 
-dfc.list <- dfc.list[c('fibroblast 4', 'CD8-positive, alpha-beta T cell 10')]
+dfc.list <- dfc.list[c('fibroblast 4', 'CD8-positive, alpha-beta T cell 10', 'CD4-positive, alpha-beta T cell 3', 'B cell 1')]
 
 saveRDS(dfc.list, snakemake@output[['signature_correlation_comparison_data_frame_list_examples']])
 

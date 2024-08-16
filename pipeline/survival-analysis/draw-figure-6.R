@@ -33,7 +33,7 @@ celltype_pal$Cell_type <- str_split(celltype_pal$Cell_type_dis, " \\(", simplify
 celltype_pal_to_use <- celltype_pal$color_dis
 names(celltype_pal_to_use) <- celltype_pal$Cell_type
 
-# Panel A
+# Panel E
 ## tcga
 clin.assoc.tcga <- readRDS(snakemake@input[["clin_assoc_paad"]]) |>
         mutate(celltype = str_split(signature, "\\.", simplify = T)[, 1]) |>
@@ -237,7 +237,7 @@ colnames(mat1_all) <- gsub("purity", "Purity", colnames(mat1_all))
 
 rownames(mat1_all) <- plyr::mapvalues(rownames(mat1_all),
         from = c("Niche_1", "Niche_2", "Niche_3", "Niche_4"),
-        to = c("Ecotype - Unknown", "Ecotype 1 - Classical", "Ecotype 2 - Basal-like", "Ecotype 3 - Immune act.")
+        to = c("Niche - Unknown", "Niche 1 - Classical", "Niche 2 - Basal-like", "Niche 3 - Immune act.")
 )
 
 ht <- Heatmap(mat1_all,
@@ -280,7 +280,7 @@ margin_spacer <- function(x) {
     return(0)
 }
 
-# Panel B
+# Panel # - REMOVED (bar plots of signature/program HRs)
 res.cox.to.plot <- readRDS(snakemake@input[["coxph_summary_paad"]]) |> 
         mutate(celltype = str_split(signature, "\\.", simplify = T)[, 1]) |>
         mutate(signature = str_split(signature, "\\.", simplify = T)[, 2])
@@ -312,7 +312,7 @@ hr.paad <- ggplot(res.cox.to.plot, aes(x = reorder(unique_signature, -HR), y = H
 #ggsave("test-tcga-coxph-HR.png", width = 15, height = 13, units = "in", dpi = 321)
 rm(res.cox.to.plot)
 
-# Panel C
+# Panel # - REMOVED (bar plots of signature/program HRs)
 res.cox.to.plot <- readRDS(snakemake@input[["coxph_summary_pancurx"]]) |>
         mutate(celltype = str_split(signature, "\\.", simplify = T)[, 1]) |>
         mutate(signature = str_split(signature, "\\.", simplify = T)[, 2])
@@ -344,17 +344,18 @@ hr.pancurx <- ggplot(res.cox.to.plot, aes(x = reorder(unique_signature, -HR), y 
 # ggsave("test-pancurx-coxph-HR.png", width = 15, height = 13, units = "in", dpi = 321)
 rm(res.cox.to.plot)
 
-# Panel D
+# Panel B
 p_list <- readRDS(snakemake@input[["cm_curve_plot_list_paad"]])
-
 epi_10_cm_curve_tcga <- p_list[[19]]$plot + labs(title = "TCGA - Epithelial Program\nZFAS1/P4HA1/EIF4A2")
 
-# Panel E
 p_list <- readRDS(snakemake@input[["cm_curve_plot_list_pancurx"]])
-
 epi_10_cm_curve_pancurx <- p_list[[19]]$plot + labs(title = "Chan - Epithelial Program\nZFAS1/P4HA1/EIF4A2")
 
-# Panel F
+epi_10_cm_curve <- ggarrange(epi_10_cm_curve_pancurx, epi_10_cm_curve_tcga, ncol = 2, nrow = 1, common.legend = TRUE)
+ggsave(snakemake@output[["figure6_b"]], plot = ggarrange(epi_10_cm_curve_tcga, epi_10_cm_curve_pancurx, ncol = 2, nrow = 1, common.legend = TRUE, legend = "right"), 
+       width = snakemake@params[["figure6_b_width"]], height = snakemake@params[["figure6_b_height"]], units = "in", dpi = 360, bg = "white")
+
+# Panel A
 paad.clin.for.plotting <- readRDS(snakemake@input[["clin_data_for_plotting_paad_niche"]])
 pancurx.clin.for.plotting <- readRDS(snakemake@input[["clin_data_for_plotting_pancurx_niche"]])
 
@@ -376,41 +377,45 @@ clin.for.plotting <- rbind(
 
 niche.2.vs.epi.14 <- ggplot(clin.for.plotting, aes(x = Niche_2_mean, y = `pancreatic epithelial cell.pancreatic epithelial cell Rep 14_mean`, colour = Group)) +
         geom_point() +
+        scale_colour_jama() +
         lims(x = c(-30, NA)) +
         geom_smooth(method = "lm", se = FALSE) +
-        stat_cor(show.legend = FALSE) +
-        labs(x = "Ecotype - Classical", y = "Epithelial Classical-A", title = "Enrichment score") +
+        stat_cor(show.legend = FALSE, method = "spearman", cor.coef.name = "rho") +
+        labs(x = "Enrichment score - Niche - Classical", y = "Enrichment score - Epithelial Classical-A", colour = "Cohort") +
         theme_pubr() +
         theme(legend.position = "top")
 
 niche.3.vs.epi.4 <- ggplot(clin.for.plotting, aes(x = Niche_3_mean, y = `pancreatic epithelial cell.pancreatic epithelial cell Rep 4_mean`, colour = Group)) +
         geom_point() +
+        scale_colour_jama() +
         geom_smooth(method = "lm", se = FALSE) +
-        stat_cor() +
-        labs(x = "Ecotype - Basal-like", y = "Epithelial Basal-like-A - EMT", title = "Enrichment score") +
+        stat_cor(show.legend = FALSE, method = "spearman", cor.coef.name = "rho") +
+        labs(x = "Enrichment score - Niche - Basal-like", y = "Enrichment score - Epithelial Basal-like-A - EMT", colour = "Cohort") +
         theme_pubr() +
         theme(legend.position = "top")
 
 niche.vs.epi <- ggarrange(niche.2.vs.epi.14, niche.3.vs.epi.4, ncol = 2, nrow = 1, common.legend = TRUE)
+ggsave(snakemake@output[["figure6_a"]], plot = niche.vs.epi, width = snakemake@params[["figure6_a_width"]], height = snakemake@params[["figure6_a_height"]], units = "in", dpi = 360)
 
+# Panel C
 niche.3.vs.epi.10 <- ggplot(pancurx.clin.for.plotting, aes(x = Niche_3_mean, y = `pancreatic epithelial cell.pancreatic epithelial cell Rep 10_mean`)) +
         geom_point() +
         geom_smooth(method = "lm", se = FALSE) +
-        stat_cor() +
-        labs(x = "Ecotype - Basal-like", y = "Epithelial Program ZFAS1/P4HA1/EIF4A2", title = "Chan\nEnrichment score") +
+        stat_cor(method = "spearman", cor.coef.name = "rho") +
+        labs(x = "Niche - Basal-like", y = "Epithelial Program ZFAS1/P4HA1/EIF4A2", title = "Chan\nEnrichment score") +
         theme_pubr() +
-        theme(legend.position = "top")
+        theme(legend.position = "top", plot.title = element_text(size = 18))
 
-# Panel G
+# Panel D
 p_list <- readRDS(snakemake@input[["cm_curve_plot_list_paad_niche"]])
 niche_3_cm_curve_tcga <- p_list[[6]]$plot
 
-## new code for panel D
-niche_3_cm_curve_tcga <- survminer::ggsurvplot(fit = survival::survfit(survival::Surv(OS.time, OS) ~ PurIST, data = paad.clin.for.plotting), data = paad.clin.for.plotting, pval = TRUE) 
+## new code for Panel D
+niche_3_cm_curve_tcga <- survminer::ggsurvplot(fit = survival::survfit(survival::Surv(OS.time, OS) ~ PurIST, data = paad.clin.for.plotting), data = paad.clin.for.plotting, pval = TRUE, conf.int = TRUE, pval.coord = c(1800, 0.95))
 niche_3_cm_curve_tcga <- niche_3_cm_curve_tcga$plot + labs(title = "TCGA\nExpression subtype")
 
 p_list <- readRDS(snakemake@input[["cm_curve_plot_list_pancurx_niche"]])
-niche_3_cm_curve_pancurx <- p_list[[6]]$plot + labs(title = "Chan\nEcotype - Basal-like")
+niche_3_cm_curve_pancurx <- p_list[[6]]$plot + labs(title = "Chan\nNiche - Basal-like") + theme(title = element_text(size = 20))
 
 niche_3_cm_curve <- ggarrange(niche_3_cm_curve_tcga, niche_3_cm_curve_pancurx, ncol = 2, nrow = 1, common.legend = TRUE)
 
@@ -425,7 +430,7 @@ CCDDEEEEEE
 "
 
 ht.grob <- grid.grabExpr(draw(ht))
-epi_10_cm_curve <- ggarrange(epi_10_cm_curve_tcga, epi_10_cm_curve_pancurx, ncol = 2, nrow = 1, common.legend = TRUE)
+
 
 pdf(file = snakemake@output[["figure6_pdf"]], width = snakemake@params[["figure6_width"]], height = snakemake@params[["figure6_height"]])
 niche.vs.epi + epi_10_cm_curve + niche.3.vs.epi.10 + niche_3_cm_curve_tcga + ht.grob + #hr.paad + hr.pancurx + 

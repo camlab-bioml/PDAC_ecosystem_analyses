@@ -63,7 +63,7 @@ p.sig.hetero.agree <- ggscatter(sig.loading.var.to.plot,
           add = "reg.line"
 ) +
   facet_wrap(~ measure, scales = "free") +
-  stat_cor()
+  stat_cor(method = "spearman", cor.coef.name = "rho")
 ggsave(snakemake@output[['figure3_a']], width = snakemake@params[['figure3_a_width']], height = snakemake@params[['figure3_a_height']], units = "in", dpi = 360)
 
 print("Signature loading heterogeneity plot (combined) successfully created")
@@ -71,9 +71,10 @@ print("Signature loading heterogeneity plot (combined) successfully created")
 # panel B
 p.sig.hetero.agree.ct <- ggplot(sig.loading.var.to.plot, aes(x = Discovery, y = Validation, color = measure)) +
   geom_point() + 
-  stat_cor(method = "spearman") +
-  geom_smooth(method = "lm") +
+  stat_cor(method = "spearman", cor.coef.name = "rho") +
+  geom_smooth(method = "lm", se = FALSE) +
   facet_wrap(~ celltype, scales = "free", ncol = 4) +
+  #lims(y = c(0, 1)) +
   scale_color_jco() +
   labs(x = "Gene Program loading variance (Discovery)", y = "Gene Program loading variance (Validation)") +
   theme_pubr() + 

@@ -176,9 +176,15 @@ ht.dist.corr <- Heatmap(w.corr.mtx, rect_gp = gpar(type = "none"), show_heatmap_
 #         width = ncol(w.corr.mtx) * unit(0.4, "in"))
 
 # plot both gene loading correlations and distance between discovery and validation
-png(snakemake@output[["figure2_b"]], width = snakemake@params[["figure2_b_width"]], height = snakemake@params[["figure2_b_height"]], units = "in", res = 360)
-draw(ht.coor + ht.dist, ht_gap = unit(-80, "mm"))
+png(snakemake@output[["figure2_b_png"]], width = snakemake@params[["figure2_b_width"]], height = snakemake@params[["figure2_b_height"]], units = "in", res = 360)
+draw(ht.coor + ht.dist, ht_gap = unit(-91.5, "mm"))
 dev.off()
+
+pdf(snakemake@output[["figure2_b_pdf"]], width = snakemake@params[["figure2_b_width"]], height = snakemake@params[["figure2_b_height"]])
+draw(ht.coor + ht.dist, ht_gap = unit(-91.5, "mm"))
+dev.off()
+
+print("Gene loading correlation and distance plot successfully created")
 
 # panel C
 # heatmap annotations
@@ -379,11 +385,21 @@ print("Gene loading correlation and distance plot successfully created")
 
 # plot Figure 2
 design <- "
-AAAAABBB
-CCCCCDDD
-CCCCCDDD
-CCCCCDDD
-CCCCCDDD
+AAABBBBB
+AAABBBBB
+AAABBBBB
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
+CCCCCDEF
 "
 
 ht.grob <- grid.grabExpr(draw(ht, merge_legend = TRUE))
@@ -393,16 +409,24 @@ ht.dist.corr.grob = grid.grabExpr(draw(ht.dist.corr, heatmap_legend_list = list(
         #Legend(title = "Correlation - Distance", col_fun = col.corrminusdist)
 )))
 
-ht.dist.corr.grob <- grid.grabExpr(draw(ht.coor + ht.dist, ht_gap = unit(-91.5, "mm")))
+#ht.fibro.grob <- grid.grabExpr(draw(ht.fibro))
+#ht.epi.grob <- grid.grabExpr(draw(ht.epi))
+#ht.cd8.grob <- grid.grabExpr(draw(ht.cd8))
+
+ht.dist.corr.grob <- grid.grabExpr(draw(ht.coor + ht.dist, ht_gap = unit(-91.5, "mm")), wrap.grobs = TRUE)
+# load pdf version of ht.coor + ht.dist
+ht.dist.corr.grob <- magick::image_read_pdf(snakemake@output[['figure2_b_pdf']]) |> magick::image_ggplot()
+ht.dist.corr.grob <- ht.dist.corr.grob + theme(plot.margin = margin(-0.5, -0.5, -0.5, -0.5, "in"))
 
 pdf(file = snakemake@output[["figure2_pdf"]], width = snakemake@params[["figure2_width"]], height = snakemake@params[["figure2_height"]])
-p.signum + ht.dist.corr.grob + ht.grob + ggarrange(as.grob(ht.epi), as.grob(ht.fibro), as.grob(ht.cd8), nrow = 1) + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
+ht.dist.corr.grob + p.signum + ht.grob + as.grob(ht.epi) + as.grob(ht.fibro) + as.grob(ht.cd8) + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
 dev.off()
 
 print("Figure 2 PDF successfully created")
 
 png(file = snakemake@output[["figure2_png"]], width = snakemake@params[["figure2_width"]], height = snakemake@params[["figure2_height"]], units = "in", res = 360)
-p.signum + ht.dist.corr.grob + ht.grob + ggarrange(as.grob(ht.epi), as.grob(ht.fibro), as.grob(ht.cd8), nrow = 1) + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
+ht.dist.corr.grob + p.signum + ht.grob + as.grob(ht.epi) + as.grob(ht.fibro) + as.grob(ht.cd8) + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
+#wrap_plots(A = p.signum, B = ht.dist.corr.grob, C = ht.grob, D = ggarrange(as.grob(ht.epi), as.grob(ht.fibro), as.grob(ht.cd8), nrow = 1), design = design, tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
 dev.off()
 
 print("Figure 2 PNG successfully created")

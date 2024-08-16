@@ -79,10 +79,10 @@ niches.to.plot <- niches.to.plot[!(rownames(niches.to.plot) %in% c("Discovery Ni
 niches.to.plot <- as.matrix(niches.to.plot)
 
 group.split <- str_split(rownames(niches.to.plot), " ", simplify = TRUE)[,1]
-#ht.row.labels <- gsub("Discovery Niche|Validation Niche", "Ecotype", rownames(niches.to.plot))
+#ht.row.labels <- gsub("Discovery Niche|Validation Niche", "Niche", rownames(niches.to.plot))
 row.split <- plyr::mapvalues(rownames(niches.to.plot),
   from = c("Discovery Niche  3", "Discovery Niche  2", "Discovery Niche  4", "Discovery Niche  1", "Validation Niche  3", "Validation Niche  1", "Validation Niche  4", "Validation Niche  2"),
-  to = c("Ecotype 2 - Basal-like", "Ecotype 1 - Classical", "Ecotype 3 - Immune act.", "Ecotype - Unknown", "Ecotype 2 - Basal-like", "Ecotype 1 - Classical", "Ecotype 3 - Immune act.", "Ecotype - Unknown")
+  to = c("Niche 2 - Basal-like", "Niche 1 - Classical", "Niche 3 - Immune act.", "Niche - Unknown", "Niche 2 - Basal-like", "Niche 1 - Classical", "Niche 3 - Immune act.", "Niche - Unknown")
 )
 
 column.split <- plyr::mapvalues(gsub(" [0-9]$| [0-9][0-9]$", "", colnames(niches.to.plot)),
@@ -105,23 +105,30 @@ ht.niche.loadings <- Heatmap(niches.to.plot,
   column_split = column.split,
   column_title_gp = gpar(fontface = "bold"),
   name = "Program loading",
-  top_annotation = columnAnnotation(
-    Celltype = column.split,
-    col = list(Celltype = celltype_pal_to_use),
-    show_annotation_name = FALSE
-  ),
+  # top_annotation = columnAnnotation(
+  #   Celltype = column.split,
+  #   col = list(Celltype = celltype_pal_to_use),
+  #   show_annotation_name = FALSE,
+  #   annotation_legend_param = list(legend_direction = "horizontal", nrow = 1, title = "Cell type", title_gp = gpar(fontsize = 14, fontface = "bold"), labels_gp = gpar(fontsize = 12))
+  # ),
   left_annotation = rowAnnotation(
     Group = group.split,
     col = list(Group = c("Discovery" = "#29D9E3", "Validation" = "#B03525")),
-    show_annotation_name = TRUE
+    show_annotation_name = FALSE,
+    annotation_legend_param = list(legend_direction = "horizontal", nrows = 1, title_gp = gpar(fontsize = 14, fontface = "bold"), labels_gp = gpar(fontsize = 12))
   ),
   column_names_rot = 90,
   show_row_names = FALSE,
-  col = col_fun
+  #show_column_names = FALSE,
+  col = col_fun,
+  heatmap_legend_param = list(legend_direction = "horizontal", title_gp = gpar(fontsize = 14, fontface = "bold"), labels_gp = gpar(fontsize = 12)),
 )
 
 png(snakemake@output[["figure5_b"]], width = snakemake@params[["figure5_b_width"]], height = snakemake@params[["figure5_b_height"]], units = "in", res = 360)
-draw(ht.niche.loadings#, column_title = paste0("Microenvironment Niche Factors", " - ", number.of.niches, " niches, ", nIter, " iterations")
+draw(ht.niche.loadings, column_title = "Cell states (n=60)", #paste0("Microenvironment Niche Factors", " - ", number.of.niches, " niches, ", nIter, " iterations")
+     column_title_side = "bottom", column_title_gp = gpar(fontsize = 20, fontface = "bold"),
+     heatmap_legend_side = "left", annotation_legend_side = "left",
+     merge_legend = TRUE
     )
 dev.off()
 
@@ -167,34 +174,34 @@ niche.loadings.validation <- niche.loadings |> filter(group == "Validation")
 
 names(niche.loadings.discovery) <- plyr::mapvalues(names(niche.loadings.discovery),
   from = c("Niche  3", "Niche  2", "Niche  4", "Niche  1"),
-  to = c("Ecotype - Basal-like", "Ecotype - Classical", "Ecotype - Immune act.", "Ecotype - Immune exh.")
+  to = c("Niche - Basal-like", "Niche - Classical", "Niche - Immune act.", "Niche - Immune exh.")
 )
 names(niche.loadings.validation) <- plyr::mapvalues(names(niche.loadings.validation),
   from = c("Niche  3", "Niche  1", "Niche  4", "Niche  2"),
-  to = c("Ecotype - Basal-like", "Ecotype - Classical", "Ecotype - Immune act.", "Ecotype - Immune exh.")
+  to = c("Niche - Basal-like", "Niche - Classical", "Niche - Immune act.", "Niche - Immune exh.")
 )
 
 normalize = function(v) (v - min(v, na.rm = TRUE)) / diff(range(v, na.rm = TRUE))
 
-niche.loadings.discovery <- niche.loadings.discovery |> select(sample, "Ecotype - Basal-like", "Ecotype - Classical", "Ecotype - Immune act.", "Ecotype - Immune exh.", group) |>
-  mutate("Ecotype - Basal-like" = normalize(`Ecotype - Basal-like`),
-         "Ecotype - Classical" = normalize(`Ecotype - Classical`),
-         "Ecotype - Immune act." = normalize(`Ecotype - Immune act.`),
-         "Ecotype - Immune exh." = normalize(`Ecotype - Immune exh.`)) #|>
+niche.loadings.discovery <- niche.loadings.discovery |> select(sample, "Niche - Basal-like", "Niche - Classical", "Niche - Immune act.", "Niche - Immune exh.", group) |>
+  mutate("Niche - Basal-like" = normalize(`Niche - Basal-like`),
+         "Niche - Classical" = normalize(`Niche - Classical`),
+         "Niche - Immune act." = normalize(`Niche - Immune act.`),
+         "Niche - Immune exh." = normalize(`Niche - Immune exh.`)) #|>
   #filter(grepl("PDAC", sample))
-niche.loadings.validation <- niche.loadings.validation |> select(sample, "Ecotype - Basal-like", "Ecotype - Classical", "Ecotype - Immune act.", "Ecotype - Immune exh.", group) |>
-  mutate("Ecotype - Basal-like" = normalize(`Ecotype - Basal-like`),
-         "Ecotype - Classical" = normalize(`Ecotype - Classical`),
-         "Ecotype - Immune act." = normalize(`Ecotype - Immune act.`),
-         "Ecotype - Immune exh." = normalize(`Ecotype - Immune exh.`))
+niche.loadings.validation <- niche.loadings.validation |> select(sample, "Niche - Basal-like", "Niche - Classical", "Niche - Immune act.", "Niche - Immune exh.", group) |>
+  mutate("Niche - Basal-like" = normalize(`Niche - Basal-like`),
+         "Niche - Classical" = normalize(`Niche - Classical`),
+         "Niche - Immune act." = normalize(`Niche - Immune act.`),
+         "Niche - Immune exh." = normalize(`Niche - Immune exh.`))
 
 niche.loadings.dis.val <- rbind(niche.loadings.discovery, niche.loadings.validation)
 
-p.niche.loadings.scatter <- ggplot(niche.loadings.dis.val, aes(x = `Ecotype - Basal-like`, y = `Ecotype - Classical`, color = group)) +
+p.niche.loadings.scatter <- ggplot(niche.loadings.dis.val, aes(x = `Niche - Basal-like`, y = `Niche - Classical`, color = group)) +
   geom_point() +
   #geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
   geom_smooth(method = "lm", se = FALSE) +
-  stat_cor(show.legend = FALSE) +
+  stat_cor(show.legend = FALSE, cor.coef.name = "rho", method = "spearman") +
   scale_color_manual(values = c("Discovery" = "29D9E3", "Validation" = "#B03525")) +
   labs(color = "Group") +
   theme_pubr() + 
@@ -280,7 +287,10 @@ CCDDDEEE
 "
 
 # p.cov.corr.bar <- p.cov.corr.bar + theme(legend.position = "none")
-ht.niche.loadings.grob <- grid.grabExpr(draw(ht.niche.loadings, merge_legend = TRUE))
+ht.niche.loadings.grob <- grid.grabExpr(draw(ht.niche.loadings, #column_title = "Cell states (n=60)", #paste0("Microenvironment Niche Factors", " - ", number.of.niches, " niches, ", nIter, " iterations")
+                                             #column_title_side = "bottom", column_title_gp = gpar(fontsize = 20, fontface = "bold"),
+                                             heatmap_legend_side = "bottom", annotation_legend_side = "bottom",
+                                             merge_legend = TRUE))
 
 ht.cov.i.dis.val.grob = grid.grabExpr(draw(ht.cov.i.dis.val, heatmap_legend_list = list(
         Legend(title = "Intrinsic\ncovariance", col_fun = col.cov)#,

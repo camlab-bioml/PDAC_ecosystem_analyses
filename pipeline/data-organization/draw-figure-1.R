@@ -195,11 +195,12 @@ names(cohort.pal) <- cohorts.with.num.cell[order(factor(str_split(cohorts.with.n
 ## DRAW THE UMAPs
 ### ggplot dotplot you can set shape = 21
 p.redim.list <- lapply(df.redim.list, function(df.redim) {
+  #df.redim <- df.redim.list[[group]]
   p.celltype <- ggplot(df.redim, aes(x = UMAP_1, y= UMAP_2, color = Cell_type)) +
     geom_point(alpha = 0.3, size = 0.1, shape = 1) + 
     scale_color_manual(values = c(celltype.pal.dis, celltype.pal.val)) +
     theme_pubr() +
-    labs(x = "UMAP 1", y = "UMAP 2", colour = "Cell type") + 
+    labs(x = "UMAP 1", y = "UMAP 2", color = "Cell type") + 
     guides(color = guide_legend(override.aes = list(size = 5, alpha = 0.8, shape = 16))) +
     theme(axis.title.y = element_text(face = "bold"), axis.title.x = element_text(face = "bold"),
           legend.title = element_text(face = "bold"), legend.text = element_text(face = "bold"))
@@ -217,9 +218,9 @@ p.redim.list <- lapply(df.redim.list, function(df.redim) {
 })
 
 p.redim <- ggarrange(p.redim.list$Discovery, p.redim.list$Validation, nrow = 2)
-ggsave(filename = snakemake@output[['figure1_d']], plot = p.redim, 
+ggsave(plot = p.redim, filename = snakemake@output[['figure1_d']], device = "png",
        width = snakemake@params[['umap_plot_width']], height = snakemake@params[['umap_plot_height']], 
-       units = "in", dpi = "retina")
+       units = "in", dpi = 360)
 
 print("UMAP plot successfully created")
 
@@ -230,9 +231,9 @@ p.stackedbars.list <- lapply(names(df.redim.list), function(group) {
   p.celltype <- ggplot(df.redim, aes(x = Sample, y = n, fill = Cell_type)) +
     geom_bar(stat = "identity", position = "fill") +
     scale_fill_manual(values = c(celltype.pal.dis, celltype.pal.val)) +
-    labs(x = NULL) + 
+    #labs(x = NULL) + 
     coord_flip() +
-    labs(y = "Cell type abundance", x = NULL) +
+    labs(y = "Cell type abundance", x = group) +
     theme_pubr() +
     theme(
       axis.text.y = element_blank(),

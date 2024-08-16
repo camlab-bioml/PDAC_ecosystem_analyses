@@ -177,7 +177,7 @@ for (niche in grep("Niche", colnames(niche.gsva.es), value = T)) {
                 ggsurvplot_list(list(sfit1, sfit2),
                         data = list(res.cat, res.cat.gsva),
                         legend.title = list("exprs", "gsva"),
-                        conf.int = FALSE, pval = TRUE, risk.table = TRUE, title = niche
+                        conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = niche
                 )
         )
 }
@@ -428,7 +428,7 @@ for (niche in grep("Niche", colnames(niche.gsva.es), value = T)) {
                 ggsurvplot_list(list(sfit1, sfit2),
                         data = list(res.cat, res.cat.gsva),
                         legend.title = list("exprs", "gsva"),
-                        conf.int = FALSE, pval = TRUE, risk.table = TRUE, title = niche
+                        conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = niche
                 )
         )
 }

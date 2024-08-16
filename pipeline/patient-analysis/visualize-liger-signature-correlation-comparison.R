@@ -143,21 +143,28 @@ ggplot(dfc.for.plot, aes(x = correlation_discovery, y = correlation_validation))
         geom_point(aes(color = same_cell_type_for_plot), alpha = 0.5) +
         # facet_wrap(~ cell_type_1, scales = "free", nrow = 2) +
         geom_smooth(method = "lm", colour = "grey30") +
-        stat_cor() +
         labs(
                 color = "Same celltype",
-                x = "Signature co-occurrence in discovery",
-                y = "Signature co-occurrence in validation"
+                x = "Co-occurrence (Discovery)",
+                y = "Co-occurrence (Validation)"
         ) +
         theme_pubr() +
         theme(
                 legend.title = element_blank(),
+                #legend.position = "bottom",
+                legend.text = element_text(size = 14),
                 axis.title.x = element_text(face = "bold"),
-                axis.title.y = element_text(face = "bold")
+                axis.title.y = element_text(face = "bold"),
+                text = element_text(face = "italic")
         ) +
-        guides(color = guide_legend(nrow = 2, byrow = TRUE))
+        #guides(color = guide_legend(override.aes = list(size = 5, alpha = 1, shape = 16))) +
+        guides(color = guide_legend(size = 12, nrow = 2, byrow = TRUE)) +
+        stat_cor(aes(#label = after_stat(paste0("italic(R)~`=`~", r, "~`,`~italic(p)~`=`~", p))
+                     #label = paste0(after_stat(r.label), "*','~", after_stat(p.label))
+                     label = paste(after_stat(r.label), after_stat(p.label), sep = "*`,`~")
+                     ))
 
-ggsave(snakemake@output[["patient_profiles_correlation_comparison_overall"]], device = "png", width = 5, height = 5.5, units = "in", dpi = 321, bg = "white")
+ggsave(snakemake@output[["patient_profiles_correlation_comparison_overall"]], device = "png", width = 4.5, height = 5, units = "in", dpi = 360, bg = "white")
 
 # plot intra-cell type correlations
 filter(dfc.for.plot, same_cell_type) |>
@@ -232,11 +239,13 @@ lapply(names(dfc.list), function(sig) {
     return()
   }
   dfc.sig <- dfc.list[[sig]] |>
-    mutate(sig.of.interest = ifelse(((abs(correlation_discovery) > 0.29 | abs(correlation_validation) > 0.29) & 
-                                       abs(correlation_discovery - correlation_validation) <= 0.25), signature, NA))
+    mutate(sig.of.interest = ifelse(((abs(correlation_discovery) > 0.3 | abs(correlation_validation) > 0.3) & 
+                                       abs(correlation_discovery - correlation_validation) <= 0.2), signature, NA))
   plot.title <- sig.interpt |> filter(signature == sig) |> pull(`short interpretation`)
-  plot.title <- paste0(plyr::mapvalues(gsub(" [0-9]$| [0-9][0-9]$", "", sig), 
-                                       from = cell_type_rename$old_name, to = cell_type_rename$new_name, warn_missing = FALSE), ": ", plot.title)
+#   plot.title <- paste0(plyr::mapvalues(gsub(" [0-9]$| [0-9][0-9]$", "", sig), 
+#                                        from = cell_type_rename$old_name, 
+#                                        to = cell_type_rename$new_name, warn_missing = FALSE), ": ", plot.title)
+  plot.title <- paste0("Co-occurrence with ", plot.title)
   
   p1 <- ggplot(dfc.sig, aes(x = reorder(unique_signature, -correlation_discovery), y = correlation_discovery)) +
     geom_bar(stat = "identity", aes(fill = celltype, alpha = `validation confidence`)) +
@@ -272,19 +281,19 @@ lapply(names(dfc.list), function(sig) {
     geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
     geom_point(aes(fill = celltype, color = celltype), size = 4) +
-    geom_label_repel(show.legend = F, max.overlaps = 20, alpha = 1, colour = "black", 
+    geom_label_repel(show.legend = F, max.overlaps = 15, alpha = 0.8, colour = "black", 
                      arrow = arrow(type = "closed", angle = 20, length = unit(0.08, "inches"))) +
     scale_fill_manual(values = celltype_pal_to_use) + 
     scale_color_manual(values = celltype_pal_to_use) +
     labs(title = plot.title,
-         x = "Correlation in discovery",
-         y = "Correlation in validation",
+         x = "Correlation in Discovery",
+         y = "Correlation in Validation",
          color = "Cell type") + 
     theme_pubr() +
     theme(axis.title = element_text(size = 16, face = "bold"),
           title = element_text(face = "bold")) + 
     guides(fill = "none")
-  ggsave(paste0(individual_plot_dir, sig, "-cooccur-scatter.png"), width = 8, height = 8, units = "in", dpi = 360)
+  ggsave(paste0(individual_plot_dir, sig, "-cooccur-scatter.png"), width = 7, height = 6, units = "in", dpi = 360)
 })
 
 # plot general signature co-occurrence agreement between discovery an validation

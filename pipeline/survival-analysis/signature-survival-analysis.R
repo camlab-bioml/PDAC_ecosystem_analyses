@@ -100,7 +100,7 @@ for (gs in names(genesets.sig)) {
                 mutate(gsva = gsva.es[[gs]]) %>%
                 # get high/low exprs
                 mutate(
-                        geneset_status = ifelse(mean > median(mean), "high", "low"),
+                        geneset_status = ifelse(mean > median(mean), "Top 50%", "Bottom 50%"),
                         geneset_status_gsva = ifelse(gsva > median(gsva), "high", "low")
                 ) %>%
                 # subset to wanted columns
@@ -196,8 +196,10 @@ for (gs in names(genesets.sig)) {
                 ggsurvplot_list(list(sfit1, sfit2),
                         #data = paad.clin.geneset,
                         data = list(res.cat, res.cat.gsva),
-                        legend.title = list("exprs", "gsva"),
-                        conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = paste0(celltype, " - ", sig)
+                        legend.title = list("Expression quantile", "gsva"),
+                        conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = paste0(celltype, " - ", sig),
+                        pval.coord = c(1800, .95), # p-value location
+                        palette = c("#E7B800", "#2E9FDF")
                 )
         )
 }
@@ -361,7 +363,7 @@ for (gs in names(genesets.sig)) {
                 mutate(gsva = gsva.es[[gs]]) %>%
                 # get high/low exprs
                 mutate(
-                        geneset_status = ifelse(mean > median(mean), "high", "low"),
+                        geneset_status = ifelse(mean > median(mean), "Top 50%", "Bottom 50%"),
                         geneset_status_gsva = ifelse(gsva > median(gsva), "high", "low")
                 ) %>%
                 # subset to wanted columns
@@ -467,8 +469,10 @@ for (gs in names(genesets.sig)) {
                 ggsurvplot_list(list(sfit1, sfit2),
                         # data = pancurx.clin.geneset,
                         data = list(res.cat, res.cat.gsva),
-                        legend.title = list("exprs", "gsva"),
-                        conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = paste0(celltype, " - ", sig)
+                        legend.title = list("Expression quantile", "gsva"),
+                        conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = paste0(celltype, " - ", sig),
+                        pval.coord = c(2800, .95), # p-value location
+                        palette = c("#E7B800", "#2E9FDF")
                 )
         )
 }

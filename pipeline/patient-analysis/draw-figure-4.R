@@ -62,19 +62,19 @@ dfc.for.plot$cell_type_2 <- plyr::mapvalues(dfc.for.plot$cell_type_2,
 
 ## plot overall correlations
 p.corr.overall <- ggplot(dfc.for.plot, aes(x = correlation_discovery, y = correlation_validation)) +
-        geom_point(aes(color = same_cell_type_for_plot), alpha = 0.5) +
+        geom_point(aes(color = gsub("Co-occurrence ", "Co-occurrence\n", same_cell_type_for_plot)), alpha = 0.5) +
         # facet_wrap(~ cell_type_1, scales = "free", nrow = 2) +
         geom_smooth(method = "lm", colour = "grey30") +
-        stat_cor() +
+        stat_cor(method = "spearman", cor.coef.name = "rho") +
         labs(
                 color = "Same celltype",
-                x = "Program co-occurrence (Discovery)",
-                y = "Program co-occurrence (Validation)"
+                x = "Co-occurrence (Discovery)",
+                y = "Co-occurrence (Validation)"
         ) +
         theme_pubr() +
         theme(
                 legend.title = element_blank(),
-                legend.position = "bottom",
+                legend.position = c(0.8, 0.2),
                 legend.text = element_text(size = 14),
                 axis.title.x = element_text(face = "bold", size = 16),
                 axis.title.y = element_text(face = "bold", size = 16),
@@ -92,8 +92,13 @@ p.corr.intra <- filter(dfc.for.plot, same_cell_type) |>
         geom_point(aes(colour = cell_type_1)) +
         scale_color_manual(values = celltype_pal_to_use) +
         facet_wrap(~cell_type_1, scales = "free", nrow = 2) +
-        geom_smooth(method = "lm") +
-        stat_cor() +
+        geom_smooth(method = "lm", level = 0.9) +
+        stat_cor(method = "spearman", cor.coef.name = "rho", 
+                 aes(label = paste(..r.label.., cut(..p.., 
+                                                breaks = c(-Inf, 0.0001, 0.001, 0.01, 0.05, Inf), 
+                                                labels = c("'****'", "'***'", "'**'", "'*'", "'ns'")),
+                               sep = "~")),
+                 label.x.npc = "left", label.y.npc = "top") +
         labs(
                 colour = "Celltype",
                 x = "Program co-occurrence in Discovery",
@@ -124,11 +129,16 @@ p.corr.inter <- Reduce(rbind, dfc.for.plot_list) |>
         scale_color_manual(values = celltype_pal_to_use) +
         facet_wrap(~facet_cell_type, scales = "free", nrow = 2) +
         geom_smooth(method = "lm") +
-        stat_cor() +
+        stat_cor(method = "spearman", cor.coef.name = "rho", 
+                 aes(label = paste(..r.label.., cut(..p.., 
+                                                breaks = c(-Inf, 0.0001, 0.001, 0.01, 0.05, Inf), 
+                                                labels = c("'****'", "'***'", "'**'", "'*'", "'ns'")),
+                               sep = "~")),
+                 label.x.npc = "left", label.y.npc = "top") +
         labs(
                 colour = "Celltype",
                 x = "Program co-occurrence in Discovery",
-                y = "Program co-occurrence\nin Validation"
+                y = "Program co-occurrence in Validation"
         ) +
         theme_pubr() +
         theme(axis.title = element_text(face = "bold"))
@@ -167,11 +177,14 @@ p.cooccur.agree <- ggplot(dis.val.agree, aes(x = reorder(unique_signature, -dis_
   ylim(0, NA) +
   scale_x_discrete(labels = dis.val.agree$signature) + 
   scale_fill_manual(values = celltype_pal_to_use) +
-  labs(x = NULL, y = "Correlation of co-occurrence\nbetween Discovery and Validation", fill = "Cell type") +
+  labs(x = "Cell state programs", y = "Correlation of co-occurrence\nbetween Discovery and Validation", fill = "Cell type") +
   geom_text(aes(label = ifelse(p_value < 0.01, "*", "")), 
             position = position_dodge(width = .9), vjust = .3, size = 20 / .pt) +
   theme_pubr() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+  theme(#axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.text.x = element_blank(),
+        axis.title.x = element_text(size = 14, face = "bold"),
+        axis.ticks.x = element_blank(),
         #plot.margin = margin(l = 0 + margin_spacer(dis.val.agree$signature))
         #plot.margin = margin(l = 0 + 32)
         )
@@ -207,8 +220,11 @@ p.cooccur.scatter.list <- lapply(names(dfc.list), function(sig) {
     mutate(sig.of.interest = ifelse(((abs(correlation_discovery) > 0.4 | abs(correlation_validation) > 0.35) & 
                                        abs(correlation_discovery - correlation_validation) <= 0.26), signature, NA))
   plot.title <- sig.interpt |> filter(signature == sig) |> pull(`short interpretation`)
-  plot.title <- paste0(plyr::mapvalues(gsub(" [0-9]$| [0-9][0-9]$", "", sig), 
-                                       from = cell_type_rename$old_name, to = cell_type_rename$new_name, warn_missing = FALSE), ":\n", plot.title)
+  plot.title <- paste0("Correlation with - ", plot.title)
+#   plot.title <- paste0(plyr::mapvalues(gsub(" [0-9]$| [0-9][0-9]$", "", sig), 
+#                                        from = cell_type_rename$old_name, 
+#                                        to = cell_type_rename$new_name, warn_missing = FALSE), ":\n", plot.title)
+
   
   ggplot(dfc.sig, aes(x = correlation_discovery, y = correlation_validation, label = sig.of.interest, fill = celltype, color = celltype)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
@@ -229,22 +245,22 @@ p.cooccur.scatter.list <- lapply(names(dfc.list), function(sig) {
     theme(legend.position = "none")
   
 })
-p.cooccur.scatter <- ggarrange(plotlist = p.cooccur.scatter.list, nrow = 1, common.legend = TRUE, legend = "none")
+p.cooccur.scatter <- ggarrange(plotlist = p.cooccur.scatter.list, nrow = 2, ncol = 2, common.legend = TRUE, legend = "none")
 ggsave(filename = snakemake@output[["figure4_f"]], plot = p.cooccur.scatter, width = snakemake@params[["figure4_f_width"]], height = snakemake@params[["figure4_f_height"]], units = "in", dpi = 360)
 
 print("Figure 4F successfully created")
 
 # plot Figure 4
 design <- "
-AAABBCCCCC
-AAABBCCCCC
-AAABBCCCCC
-AAABBDDDDD
-EEEEEDDDDD
-EEEEEFFFFF
-EEEEEFFFFF
-EEEEEFFFFF
-#####FFFFF
+AAABBBCCCCC
+AAABBBCCCCC
+AAABBBCCCCC
+EEEFFFDDDDD
+EEEFFFDDDDD
+EEEFFFDDDDD
+GGGHHHIIIII
+GGGHHHIIIII
+GGGHHHIIIII
 "
 
 p.corr.intra <- p.corr.intra + theme(legend.position = "none", axis.title.x = element_blank())
@@ -252,13 +268,13 @@ p.corr.inter <- p.corr.inter + theme(legend.position = "none")
 p.cooccur.agree <- p.cooccur.agree + theme(legend.position = c(0.5, 1), legend.direction = "horizontal")
 
 pdf(file = snakemake@output[["figure4_pdf"]], width = snakemake@params[["figure4_width"]], height = snakemake@params[["figure4_height"]])
-schematic + p.corr.overall + p.corr.intra + p.corr.inter + p.cooccur.agree + p.cooccur.scatter + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
+schematic + p.corr.overall + p.corr.intra + p.corr.inter + p.cooccur.scatter.list[[1]] + p.cooccur.scatter.list[[2]] + p.cooccur.scatter.list[[3]] + p.cooccur.scatter.list[[4]] + p.cooccur.agree + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
 dev.off()
 
 print("Figure 4 PDF successfully created")
 
 png(file = snakemake@output[["figure4_png"]], width = snakemake@params[["figure4_width"]], height = snakemake@params[["figure4_height"]], units = "in", res = 360)
-schematic + p.corr.overall + p.corr.intra + p.corr.inter + p.cooccur.agree + p.cooccur.scatter + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
+schematic + p.corr.overall + p.corr.intra + p.corr.inter + p.cooccur.scatter.list[[1]] + p.cooccur.scatter.list[[2]] + p.cooccur.scatter.list[[3]] + p.cooccur.scatter.list[[4]] + p.cooccur.agree + plot_layout(design = design) + plot_annotation(tag_levels = "A") & theme(plot.tag = element_text(face = 'bold', size = 18))
 dev.off()
 
 print("Figure 4 PNG successfully created")
