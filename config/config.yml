@@ -63,12 +63,12 @@ figure1:
   metadata_plot_height: 5
   dim_red_plot: "seuratUMAP"
   umap_plot_width: 18
-  umap_plot_height: 15
+  umap_plot_height: 18
   stacked_bar_plot_width: 10
   stacked_bar_plot_height: 15
   marker_dot_plot_width: 18
   marker_dot_plot_height: 7
-  figure1_width: 15
+  figure1_width: 16
   figure1_height: 21
 
 figure2:
@@ -78,14 +78,14 @@ figure2:
   num_top_genes_to_show: 10
   figure2_a_width: 8
   figure2_a_height: 5
-  figure2_b_width: 8
+  figure2_b_width: 7
   figure2_b_height: 6
   figure2_c_width: 22
   figure2_c_height: 25
   figure2_d_width: 10
   figure2_d_height: 12
   figure2_width: 20
-  figure2_height: 15
+  figure2_height: 16
 
 liger:
   celltypes_for_signature: "resources/cell-type-signature/signature-extraction/cell_types_for_signature.csv"
@@ -156,10 +156,10 @@ figure4:
   figure4_d_height: 5
   figure4_e_width: 18
   figure4_e_height: 8
-  figure4_f_width: 16
+  figure4_f_width: 12
   figure4_f_height: 8
-  figure4_width: 20
-  figure4_height: 12
+  figure4_width: 19
+  figure4_height: 14
 
 stan:
   run_stan: TRUE
@@ -189,8 +189,8 @@ figure5:
   cov_celltype_to_plot: "fibroblast"
   figure5_a_width: 8
   figure5_a_height: 5
-  figure5_b_width: 18
-  figure5_b_height: 10
+  figure5_b_width: 14
+  figure5_b_height: 6
   figure5_c_width: 8
   figure5_c_height: 7
   figure5_d_width: 8
@@ -217,8 +217,8 @@ figure6:
   make_figure6: TRUE
   figure6_a_width: 8
   figure6_a_height: 5
-  figure6_b_width: 22
-  figure6_b_height: 25
+  figure6_b_width: 11
+  figure6_b_height: 5
   figure6_c_width: 12
   figure6_c_height: 10
   figure6_width: 24
