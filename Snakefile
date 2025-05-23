@@ -510,6 +510,9 @@ if (config['liger']['celltypes_for_signature'] is not None) & os.path.isfile(con
 					results['figure_2_signature_markers'] = expand(figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-c-{compartment}.png', compartment = compartments)
 					results['figure_2_plot'] = expand(figureoutput + 'LIGER/signature-analysis/figure-2/{compartment}/figure-2-{compartment}.png', compartment = compartments)
 
+				if (config['figure1']['make_figure1']):
+					results['figure_1_new_plot'] = expand(figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1.png')
+
 				if (config['figure3']['make_figure3']):
 					results['LIGER_signature_loading_variance_df_combined'] = expand(resultoutput + 'LIGER/signature-analysis/figure-3/{compartment}/signature-loading-variance-dis-val.tsv', compartment = compartments)
 
@@ -523,7 +526,10 @@ if (config['liger']['celltypes_for_signature'] is not None) & os.path.isfile(con
 					results['LIGER_signature_loading_cooccurrence_agreement_examples'] = expand(resultoutput + 'LIGER/patient-analysis/figure-4/{profile}/patient-{compartment}-signature-{profile}-correlation-comparison-data-frame-list-examples.rds', compartment = compartments, profile = patient_profile_flavors)
 
 					results['figure_4_plot'] = expand(figureoutput + 'LIGER/patient-analysis/figure-4/{compartment}/loading-mean/figure-4-loading-mean-{compartment}.png', compartment = compartments)
-
+				
+				if (config['figure4']['make_figure4']):
+					results['figure_2_new_plot'] = expand(figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-loading-mean-{compartment}.png', compartment = compartments)
+				
 				if(config['stan']['run_stan'] & (config['stan']['stan_ct_config'] is not None) & os.path.isfile(config['stan']['stan_ct_config']) & os.path.isfile(config['stan']['stan_param_config'])):
 					stan_ct_config = pd.read_csv(config['stan']['stan_ct_config'], header = 0)
 					scopes = list(stan_ct_config.keys())
@@ -563,6 +569,9 @@ if (config['liger']['celltypes_for_signature'] is not None) & os.path.isfile(con
 
 						results['figure_5_plot'] = expand(figureoutput + 'LIGER/patient-analysis/figure-5/{scope}/figure-5-{scope}.png', scope = scopes)
 
+					if(config['figure5']['make_figure5']):
+						results['figure_3_new_plot'] = expand(figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-{scope}.png', scope = scopes)
+
 					if(config['survival']['run_survival_analysis']):
 						results['survival_analysis_TCGA_PDAC_clinical_data'] = expand(resultoutput + 'LIGER/survival-analysis/clinical-data/paad-clin-data.tsv')
 						results['survival_analysis_COMPASS_clinical_data'] = expand(resultoutput + 'LIGER/survival-analysis/clinical-data/compass-clin-data.tsv')
@@ -581,6 +590,9 @@ if (config['liger']['celltypes_for_signature'] is not None) & os.path.isfile(con
 						results['survival_analysis_niche_PanCuRx_CM_curve_plot_list'] = expand(resultoutput + 'LIGER/survival-analysis/{scope}/niche-survival-analysis/cm-curve-plot-list-pancurx-niche.rds', scope = scopes)
 
 						results['figure_6_plot'] = expand(figureoutput + 'LIGER/survival-analysis/figure-6/figure-6.png')
+						results['figure_4_new_plot'] = expand(figureoutput + 'LIGER/survival-analysis/figure-4-new/figure-4.png')
+
+						results['figure_niche_loadings_in_bulkrna'] = expand(figureoutput + 'LIGER/survival-analysis/full/niche-survival-analysis/niche-loadings-pancurx.png')
 					
 
 			
@@ -603,6 +615,6 @@ report: "report/workflow.rst"
 
 rule all:
     input:
-        results.values(),
-	groupedfiles.values(),
+        results.values()#,
+	#groupedfiles.values(),
 	# report
