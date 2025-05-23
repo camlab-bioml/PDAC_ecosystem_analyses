@@ -181,8 +181,8 @@ p.cooccur.agree <- ggplot(dis.val.agree, aes(x = reorder(unique_signature, -dis_
   geom_text(aes(label = ifelse(p_value < 0.01, "*", "")), 
             position = position_dodge(width = .9), vjust = .3, size = 20 / .pt) +
   theme_pubr() +
-  theme(#axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-        axis.text.x = element_blank(),
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        #axis.text.x = element_blank(),
         axis.title.x = element_text(size = 14, face = "bold"),
         axis.ticks.x = element_blank(),
         #plot.margin = margin(l = 0 + margin_spacer(dis.val.agree$signature))
