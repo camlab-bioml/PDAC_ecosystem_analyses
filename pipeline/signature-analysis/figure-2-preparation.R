@@ -19,6 +19,7 @@ print(celltypes)
 gene.loading.df.list <- lapply(celltypes, function(ct) {
   gene.loading.mtx.path <- grep(ct, snakemake@input[['gene_loading_mtx']], value = TRUE)[1]
   df <- read_tsv(gene.loading.mtx.path)
+  df <- df |> mutate(gene = str_split(gene, "_ENSG", simplify = TRUE)[,1])
   df
 })
 names(gene.loading.df.list) <- celltypes
@@ -201,6 +202,10 @@ top.gene.list <- lapply(gene.loading.df.list, function(gene.loading.df) {
 gene.loading.top.gene.df.list <- lapply(celltypes, function(ct) {
   gene.loading.df <- gene.loading.df.list[[ct]]
   top.genes <- Reduce(union, top.gene.list[[ct]])
+  # add KRAS, BRCA1, BRCA2 for pancreatic epithelial cells
+  if (ct == "pancreatic epithelial cell") {
+    top.genes <- union(top.genes, c("KRAS"))
+  }
   
   as.matrix(gene.loading.df)[top.genes,]
 })
@@ -210,40 +215,46 @@ names(gene.loading.top.gene.df.list) <- celltypes
 gene.loading.top.gene.df.to.plot.list <- list() 
 
 # select signatures from epithelial cells
-gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`pancreatic epithelial cell` %>% t() %>% rescale() %>% t()
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`pancreatic epithelial cell` |> t() |> rescale() |> t()
+top.genes.epi <- top.gene.list$`pancreatic epithelial cell`
 
-gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.to.plot[Reduce(union,
-                                                                            list(top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 4`,
-                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 7`,
-                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 11`,
-                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 12`,
-                                                                                 top.gene.list$`pancreatic epithelial cell`$`pancreatic epithelial cell Rep 15`)),
-                                                                     c(4, 7, 11, 12, 15)]
+gene.loading.top.gene.df.to.plot <- 
+  gene.loading.top.gene.df.to.plot[Reduce(union,
+                                          list(top.genes.epi$`pancreatic epithelial cell Rep 4`,
+                                               top.genes.epi$`pancreatic epithelial cell Rep 7`,
+                                               top.genes.epi$`pancreatic epithelial cell Rep 10`,
+                                               top.genes.epi$`pancreatic epithelial cell Rep 11`,
+                                               top.genes.epi$`pancreatic epithelial cell Rep 12`,
+                                               #top.genes.epi$`pancreatic epithelial cell Rep 15`
+                                               c("KRAS"))),
+                                   c(4, 7, 10, 11, 12)] #, 15)]
 
 gene.loading.top.gene.df.to.plot.list[['pancreatic epithelial cell']] <- gene.loading.top.gene.df.to.plot
 
 # select signatures from fibroblasts
-gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$fibroblast %>% t() %>% rescale() %>% t()
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$fibroblast |> t() |> rescale() |> t()
+top.genes.fibro <- top.gene.list$fibroblast
 
 gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.to.plot[Reduce(union, 
-                                                                            list(top.gene.list$fibroblast$`fibroblast Rep 2`,
-                                                                                 top.gene.list$fibroblast$`fibroblast Rep 4`,
-                                                                                 top.gene.list$fibroblast$`fibroblast Rep 6`,
-                                                                                 top.gene.list$fibroblast$`fibroblast Rep 8`)),
+                                                                            list(top.genes.fibro$`fibroblast Rep 2`,
+                                                                                 top.genes.fibro$`fibroblast Rep 4`,
+                                                                                 top.genes.fibro$`fibroblast Rep 6`,
+                                                                                 top.genes.fibro$`fibroblast Rep 8`)),
                                                                      c(2, 4, 6, 8)]
 
 gene.loading.top.gene.df.to.plot.list[['fibroblast']] <- gene.loading.top.gene.df.to.plot
 
 # select signatures from CD8 T/NK cells
-gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`CD8-positive, alpha-beta T cell` %>% t() %>% rescale() %>% t()
+gene.loading.top.gene.df.to.plot <- gene.loading.top.gene.df.list$`CD8-positive, alpha-beta T cell` |> t() |> rescale() |> t()
+top.genes.cd8 <- top.gene.list$`CD8-positive, alpha-beta T cell`
 
 gene.loading.top.gene.df.to.plot <- 
   gene.loading.top.gene.df.to.plot[Reduce(union, 
-                                          list(top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 2`,
-                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 4`,
-                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 7`,
-                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 9`,
-                                               top.gene.list$`CD8-positive, alpha-beta T cell`$`CD8-positive, alpha-beta T cell Rep 10`)),
+                                          list(top.genes.cd8$`CD8-positive, alpha-beta T cell Rep 2`,
+                                               top.genes.cd8$`CD8-positive, alpha-beta T cell Rep 4`,
+                                               top.genes.cd8$`CD8-positive, alpha-beta T cell Rep 7`,
+                                               top.genes.cd8$`CD8-positive, alpha-beta T cell Rep 9`,
+                                               top.genes.cd8$`CD8-positive, alpha-beta T cell Rep 10`)),
                                    c(2, 4, 7, 9, 10)]
 
 gene.loading.top.gene.df.to.plot.list[['CD8-positive, alpha-beta T cell']] <- gene.loading.top.gene.df.to.plot

@@ -24,6 +24,16 @@ sig.interpt <- readxl::read_xlsx(snakemake@input[['sig_interpretation']])
 
 # signatures to remove
 ambient.sigs <- read_csv(snakemake@input[['ambient_sigs']])$signature
+ambient.sigs <- c(ambient.sigs, 
+                  "myeloid dendritic cell Sig 3", 
+                  "pancreatic epithelial cell Sig 3", 
+                  "pancreatic epithelial cell Sig 6", 
+                  "CD8-positive, alpha-beta T cell Sig 8", 
+                  "macrophage Sig 11", 
+                  "macrophage Sig 12", 
+                  "fibroblast Sig 5", 
+                  "CD4-positive, alpha-beta T cell Sig 5",
+                  "CD4-positive, alpha-beta T cell Sig 6")
 
 # panel A
 # load signature numbers df
@@ -41,7 +51,7 @@ p.signum <- ggplot(sig.number.df, aes(x = factor(Condition, levels = c("Merged",
   facet_wrap(~cell_type_to_show, nrow = 2) +
   labs(#title = paste0('Number of signatures for each cell types'),
     x = NULL, 
-    y = 'Number of signatures') +
+    y = 'Number of programs') +
   coord_flip() +
   ggpubr::theme_pubr() #+
   #theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
@@ -385,17 +395,7 @@ print("Gene loading correlation and distance plot successfully created")
 
 # plot Figure 2
 design <- "
-AAABBBBB
-AAABBBBB
-AAABBBBB
-CCCCCDEF
-CCCCCDEF
-CCCCCDEF
-CCCCCDEF
-CCCCCDEF
-CCCCCDEF
-CCCCCDEF
-CCCCCDEF
+AABBBBBB
 CCCCCDEF
 CCCCCDEF
 CCCCCDEF
