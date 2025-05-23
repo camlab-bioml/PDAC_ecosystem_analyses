@@ -108,7 +108,7 @@ for (niche in grep("Niche", colnames(niche.gsva.es), value = T)) {
 	paad.clin.for.plotting <- inner_join(niche.sig.exprs.mean.subset, paad.clin.for.plotting, by = "bcr_patient_barcode")
 
         # further remove samples with missing/not useful information
-        paad.clin.geneset <- paad.clin.geneset[!is.na(paad.clin.geneset$OS.time), ]
+        paad.clin.geneset <- paad.clin.geneset[!is.na(paad.clin.geneset$PFI.time), ]
 
         # model association with clinical variables
         # clin.assoc.list[["gender"]][[niche]] <- summary(lm(as.formula(paste0("`", niche, score_for_clin_assoc, "` ~ 0 + gender")), data = paad.clin.for.plotting))$coefficients
@@ -143,18 +143,18 @@ for (niche in grep("Niche", colnames(niche.gsva.es), value = T)) {
         # clin.assoc.list[["subtype2"]][[niche]] <- summary(lm(as.formula(paste0("`", niche, score_for_clin_assoc, "` ~ 0 + Moffitt")), data = paad.clin.for.plotting))$coefficients
 
         # fit CoxPH model
-  	cox1 <- coxph(Surv(OS.time, OS) ~ mean, data = paad.clin.geneset)
-  	cox2 <- coxph(Surv(OS.time, OS) ~ gsva, data = paad.clin.geneset)
+  	cox1 <- coxph(Surv(PFI.time, PFI) ~ mean, data = paad.clin.geneset)
+  	cox2 <- coxph(Surv(PFI.time, PFI) ~ gsva, data = paad.clin.geneset)
  	cox.list[[niche]] <- cox1
  	cox.gsva.list[[niche]] <- cox2
 
         # find optimal cutpoints to categorize geneset loading
  	res.cut <- surv_cutpoint(paad.clin.geneset,
-         	time = "OS.time", event = "OS",
+         	time = "PFI.time", event = "PFI",
          	variables = c("mean"), minprop = 0.5
  	)
         res.cut.gsva <- surv_cutpoint(paad.clin.geneset,
-                time = "OS.time", event = "OS",
+                time = "PFI.time", event = "PFI",
                 variables = c("gsva"), minprop = 0.5
         )
         # summary(res.cut)
@@ -168,8 +168,8 @@ for (niche in grep("Niche", colnames(niche.gsva.es), value = T)) {
         # head(res.cat.gsva)
 
         # create survival curves
- 	sfit1 <- survfit(Surv(OS.time, OS) ~ mean, data = res.cat)
- 	sfit2 <- survfit(Surv(OS.time, OS) ~ gsva, data = res.cat.gsva)
+ 	sfit1 <- survfit(Surv(PFI.time, PFI) ~ mean, data = res.cat)
+ 	sfit2 <- survfit(Surv(PFI.time, PFI) ~ gsva, data = res.cat.gsva)
         # summary(sfit, times=seq(0,365*5,365))
 
         p_list <- c(
@@ -213,7 +213,7 @@ res.cox.tcga.niche <- res.cox
 
 ## Extract data from clin.assoc.list
 holder.list <- lapply(clin.assoc.list, function(clin.assoc) {
-        clin.assoc <- lapply(clin.assoc, function(x) x[, 1])
+        clin.assoc <- lapply(clin.assoc, function(x) x[, 3]) # 1 for estimate, 2 for std.error, 3 for t value, 4 for p value
         as.data.frame(do.call(rbind, clin.assoc)) %>% rownames_to_column("niche")
 })
 holder.list <- lapply(names(holder.list), function(clin.var) {
@@ -228,8 +228,8 @@ clin.assoc.tcga.niche <- Reduce(function(x, y) {
 }, holder.list)
 holder <- res.cox |>
         select(niche, HR) |>
-        mutate(HR = HR - 1)
-names(holder) <- c("niche", "HR-1")
+        mutate(HR = log(HR))
+names(holder) <- c("niche", "log(HR)")
 clin.assoc.tcga.niche <- left_join(holder, clin.assoc.tcga.niche, by = "niche")
 
 rm(holder.list, holder)
@@ -249,7 +249,7 @@ clin.assoc.tcga.pval.niche <- Reduce(function(x, y) {
         left_join(x, y, by = "niche")
 }, holder.list)
 holder <- res.cox |> select(niche, p.adj)
-names(holder) <- c("niche", "HR-1")
+names(holder) <- c("niche", "log(HR)")
 clin.assoc.tcga.pval.niche <- left_join(holder, clin.assoc.tcga.pval.niche, by = "niche")
 
 rm(holder.list, holder)
@@ -465,7 +465,7 @@ res.cox.pancurx.niche <- res.cox
 
 # Extract data from clin.assoc.list
 holder.list <- lapply(clin.assoc.list, function(clin.assoc) {
-        clin.assoc <- lapply(clin.assoc, function(x) x[, 1])
+        clin.assoc <- lapply(clin.assoc, function(x) x[, 3]) # 1 for estimate, 2 for std.error, 3 for t value, 4 for p value
         as.data.frame(do.call(rbind, clin.assoc)) %>% rownames_to_column("niche")
 })
 holder.list <- lapply(names(holder.list), function(clin.var) {
@@ -475,13 +475,15 @@ holder.list <- lapply(names(holder.list), function(clin.var) {
 })
 names(holder.list) <- names(clin.assoc.list)
 
+print(holder.list[["adjuvant_outcome"]])
+
 clin.assoc.pancurx.niche <- Reduce(function(x, y) {
         left_join(x, y, by = "niche")
 }, holder.list)
 holder <- res.cox |>
         select(niche, HR) |>
-        mutate(HR = HR - 1)
-names(holder) <- c("niche", "HR-1")
+        mutate(HR = log(HR))
+names(holder) <- c("niche", "log(HR)")
 clin.assoc.pancurx.niche <- left_join(holder, clin.assoc.pancurx.niche, by = "niche")
 
 rm(holder.list, holder)
@@ -497,11 +499,13 @@ holder.list <- lapply(names(holder.list), function(clin.var) {
 })
 names(holder.list) <- names(clin.assoc.list)
 
+print(holder.list[["adjuvant_outcome"]])
+
 clin.assoc.pancurx.pval.niche <- Reduce(function(x, y) {
         left_join(x, y, by = "niche")
 }, holder.list)
 holder <- res.cox |> select(niche, p.adj)
-names(holder) <- c("niche", "HR-1")
+names(holder) <- c("niche", "log(HR)")
 clin.assoc.pancurx.pval.niche <- left_join(holder, clin.assoc.pancurx.pval.niche, by = "niche")
 
 rm(holder.list, holder)

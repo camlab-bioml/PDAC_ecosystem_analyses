@@ -1,15 +1,21 @@
 # fix some weird issue with the R environment
 #BiocManager::install(version = "3.18")
-#remotes::install_version("matrixStats", version = "1.1.0", repos = "https://cloud.r-project.org")
-#library(matrixStats)
+.libPaths()
+# Add custom library path if needed
+#.libPaths(c(.libPaths(), "/ddn_exa/campbell/cyu/cyu/R/x86_64-pc-linux-gnu-library/4.2"))
+#library(matrixStats, lib.loc = "/ddn_exa/campbell/cyu/cyu/R/x86_64-pc-linux-gnu-library/4.2")
+sessionInfo()
+
+#install.packages("survminer", repos = "https://cloud.r-project.org")
+#remotes::install_version("matrixStats", version = "1.1.0", repos = "https://cloud.r-project.org", lib = "/home/campbell/cyu/R/x86_64-pc-linux-gnu-library/4.2")
+#install.packages("Rcpp", repos = "https://cloud.r-project.org", INSTALL_opts = '--no-lock')
+#library(Rcpp)
 
 # Load libraries
 suppressPackageStartupMessages({
-        library(magrittr)
         library(tidyverse)
+        library(magrittr)
         library(sjstats)
-        library(tidyr)
-        library(stringr)
         library(reticulate)
         library(fastcluster)
         library(BiocParallel)
@@ -57,18 +63,31 @@ print("Data loaded")
 #unloadNamespace("matrixStats")
 #remotes::install_version("matrixStats", version = "1.1.0")
 #library(matrixStats)
-gsva.es <- gsva(
-        expr = PAAD.mRNA.vst %>% column_to_rownames("bcr_patient_barcode") %>% as.matrix() %>% t(),
-        gset.idx.list = genesets.sig,
-        method = "gsva",
-        kcdf = "Poisson",
-        verbose = T,
-        BPPARAM = MulticoreParam(16)
-) %>%
-        t() %>%
-        as.data.frame() %>%
-        rownames_to_column("bcr_patient_barcode")
 
+expr_matrix <- PAAD.mRNA.vst |> column_to_rownames("bcr_patient_barcode") |> as.matrix() |> t() # t() is needed to make it genes x samples
+# Create GSVA params object
+gsva_params <- gsvaParam(
+    exprData = expr_matrix,
+    geneSets = genesets.sig,
+    kcdf = "Poisson"
+)
+# Run GSVA
+gsva.es <- gsva(
+        param = gsva_params,
+        verbose = TRUE,
+        BPPARAM = MulticoreParam(16)
+) |> t() |> as.data.frame() |> rownames_to_column("bcr_patient_barcode") # t() is needed to make it samples x genes
+# gsva.es <- gsva(
+#         expr = PAAD.mRNA.vst %>% column_to_rownames("bcr_patient_barcode") %>% as.matrix() %>% t(),
+#         gset.idx.list = genesets.sig,
+#         method = "gsva",
+#         kcdf = "Poisson",
+#         verbose = T,
+#         BPPARAM = MulticoreParam(16)
+# ) %>%
+#         t() %>%
+#         as.data.frame() %>%
+#         rownames_to_column("bcr_patient_barcode")
 print("GSVA done")
 
 ## survival analysis
@@ -113,7 +132,10 @@ for (gs in names(genesets.sig)) {
         paad.clin.for.plotting <- inner_join(PAAD.mRNA.vst.geneset, paad.clin.for.plotting, by = "bcr_patient_barcode")
 
         # further remove samples with missing/not useful information
-        paad.clin.geneset <- paad.clin.geneset[!is.na(paad.clin.geneset$OS.time), ]
+        paad.clin.geneset <- paad.clin.geneset[!is.na(paad.clin.geneset$PFI.time), ]
+        #print("#############Survival analysis for geneset#############")
+        #print(gs)
+        #print(head(paad.clin.geneset |> select(bcr_patient_barcode, PFI.time, PFI, mean, gsva, geneset_status, geneset_status_gsva)))
 
         # model association with clinical variables
         # clin.assoc.list[["gender"]][[gs]] <- summary(lm(as.formula(paste0("`", gs, score_for_clin_assoc, "` ~ 0 + gender")), data = paad.clin.for.plotting))$coefficients
@@ -148,21 +170,24 @@ for (gs in names(genesets.sig)) {
         # clin.assoc.list[["subtype2"]][[gs]] <- summary(lm(as.formula(paste0("`", gs, score_for_clin_assoc, "` ~ 0 + Moffitt")), data = paad.clin.for.plotting))$coefficients
 
         # fit CoxPH model
-        cox1 <- coxph(Surv(OS.time, OS) ~ mean, data = paad.clin.geneset)
-        cox2 <- coxph(Surv(OS.time, OS) ~ gsva, data = paad.clin.geneset)
+        cox1 <- coxph(Surv(PFI.time, PFI) ~ mean, data = paad.clin.geneset)
+        cox2 <- coxph(Surv(PFI.time, PFI) ~ gsva, data = paad.clin.geneset)
         cox.list[[gs]] <- cox1
         cox.gsva.list[[gs]] <- cox2
 
         # find optimal cutpoints to categorize geneset loading
         res.cut <- surv_cutpoint(paad.clin.geneset,
-                time = "OS.time", event = "OS",
+                time = "PFI.time", event = "PFI",
                 variables = c("mean"), minprop = 0.4
         )
         res.cut.gsva <- surv_cutpoint(paad.clin.geneset,
-                time = "OS.time", event = "OS",
+                time = "PFI.time", event = "PFI",
                 variables = c("gsva"), minprop = 0.4
         )
-        # summary(res.cut)
+        #print("#############Cutpoint#############")
+        #summary(res.cut) |> print()
+        #print("#############Cutpoint GSVA#############")
+        #summary(res.cut.gsva) |> print()
         res.cut.list[[gs]] <- res.cut
         res.cut.gsva.list[[gs]] <- res.cut.gsva
 
@@ -171,14 +196,20 @@ for (gs in names(genesets.sig)) {
 
         res.cat <- surv_categorize(res.cut)
         res.cat.gsva <- surv_categorize(res.cut.gsva)
-        # head(res.cat)
+        #print("#############Survival categorize#############")
+        #head(res.cat) |> print()
+        #print("#############Survival categorize GSVA#############")
+        #head(res.cat.gsva) |> print()
 
         # create survival curves
-        sfit1 <- survfit(Surv(OS.time, OS) ~ mean, data = res.cat)
-        sfit2 <- survfit(Surv(OS.time, OS) ~ gsva, data = res.cat.gsva)
-        #sfit1 <- survfit(Surv(OS.time, OS) ~ geneset_status, data = paad.clin.geneset)
-        #sfit2 <- survfit(Surv(OS.time, OS) ~ geneset_status_gsva, data = paad.clin.geneset)
-        # summary(sfit, times=seq(0,365*5,365))
+        sfit1 <- survfit(Surv(PFI.time, PFI) ~ mean, data = res.cat)
+        sfit2 <- survfit(Surv(PFI.time, PFI) ~ gsva, data = res.cat.gsva)
+        #sfit1 <- survfit(Surv(PFI.time, PFI) ~ geneset_status, data = paad.clin.geneset)
+        #sfit2 <- survfit(Surv(PFI.time, PFI) ~ geneset_status_gsva, data = paad.clin.geneset)
+        #print("#############Survival fit#############")
+        #summary(sfit1, times=seq(0,365*5,365)) |> print()
+        #print("#############Survival fit GSVA#############")
+        #summary(sfit2, times=seq(0,365*5,365)) |> print()
 
         celltype <- plyr::mapvalues(str_split(gs, "\\.", simplify = TRUE)[, 1],
                 from = celltype_rename$old_name,
@@ -193,17 +224,23 @@ for (gs in names(genesets.sig)) {
 
         p_list <- c(
                 p_list,
-                ggsurvplot_list(list(sfit1, sfit2),
+                ggsurvplot_list(
+                        fit = list(sfit1, sfit2),
                         #data = paad.clin.geneset,
                         data = list(res.cat, res.cat.gsva),
-                        legend.title = list("Expression quantile", "gsva"),
+                        legend.title = list("Expression quantile", "GSVA"),
                         conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = paste0(celltype, " - ", sig),
-                        pval.coord = c(1800, .95), # p-value location
+                        #pval.coord = c(1800, .95), # p-value location
                         palette = c("#E7B800", "#2E9FDF")
                 )
         )
 }
 rm(gs, celltype, sig)
+
+# save survival curves
+png("output/v3/figures/survival-analysis/test.png", width = 10, height = 10, units = "in", res = 600)
+p_list[[19]]$plot + labs(x = "Time (days)", y = "Survival probability") + theme(legend.position = "none")
+dev.off()
 
 print("Survival analysis done")
 
@@ -248,7 +285,7 @@ res.cox.tcga <- res.cox
 
 ## Extract data from clin.assoc.list
 holder.list <- lapply(clin.assoc.list, function(clin.assoc) {
-        clin.assoc <- lapply(clin.assoc, function(x) x[, 1])
+        clin.assoc <- lapply(clin.assoc, function(x) x[, 3]) # 1 for estimated coefficient, 3 for t-statistic
         as.data.frame(do.call(rbind, clin.assoc)) |> rownames_to_column("signature")
 })
 holder.list <- lapply(names(holder.list), function(clin.var) {
@@ -268,8 +305,8 @@ clin.assoc.tcga <- Reduce(function(x, y) {
 }, holder.list)
 holder <- res.cox |>
         dplyr::select(signature, HR) |>
-        mutate(HR = HR - 1)
-names(holder) <- c("signature", "HR-1")
+        mutate(HR = log(HR))
+names(holder) <- c("signature", "log(HR)")
 clin.assoc.tcga <- left_join(holder, clin.assoc.tcga, by = "signature")
 
 rm(holder.list, holder)
@@ -294,7 +331,7 @@ clin.assoc.tcga.pval <- Reduce(function(x, y) {
         left_join(x, y, by = "signature")
 }, holder.list)
 holder <- res.cox |> select(signature, p.adj)
-names(holder) <- c("signature", "HR-1")
+names(holder) <- c("signature", "log(HR)")
 clin.assoc.tcga.pval <- left_join(holder, clin.assoc.tcga.pval, by = "signature")
 
 rm(holder.list, holder)
@@ -320,18 +357,32 @@ print("Data loaded")
 # unloadNamespace("matrixStats")
 # remotes::install_version("matrixStats", version = "1.1.0")
 # library(matrixStats)
-gsva.es <- gsva(
-        expr = pancurx.mRNA.logTPM %>% column_to_rownames("sample_id") %>% as.matrix() %>% t(),
-        gset.idx.list = genesets.sig,
-        method = "gsva",
-        kcdf = "Poisson",
-        verbose = T,
-        BPPARAM = MulticoreParam(16)
-) %>%
-        t() %>%
-        as.data.frame() %>%
-        rownames_to_column("sample_id")
 
+expr_matrix <- pancurx.mRNA.logTPM |> column_to_rownames("sample_id") |> as.matrix() |> t() # t() is needed to make it genes x samples
+# Create GSVA params object
+gsva_params <- gsvaParam(
+    exprData = expr_matrix,
+    geneSets = genesets.sig,
+    kcdf = "Poisson"
+)
+# Run GSVA
+gsva.es <- gsva(
+        param = gsva_params,
+        verbose = TRUE,
+        BPPARAM = MulticoreParam(16)
+) |> t() |> as.data.frame() |> rownames_to_column("sample_id") # t() is needed to make it samples x genes
+
+# gsva.es <- gsva(
+#         expr = pancurx.mRNA.logTPM %>% column_to_rownames("sample_id") %>% as.matrix() %>% t(),
+#         gset.idx.list = genesets.sig,
+#         method = "gsva",
+#         kcdf = "Poisson",
+#         verbose = T,
+#         BPPARAM = MulticoreParam(16)
+# ) %>%
+#         t() %>%
+#         as.data.frame() %>%
+#         rownames_to_column("sample_id")
 print("GSVA done")
 
 ## survival analysis
@@ -471,7 +522,7 @@ for (gs in names(genesets.sig)) {
                         data = list(res.cat, res.cat.gsva),
                         legend.title = list("Expression quantile", "gsva"),
                         conf.int = TRUE, pval = TRUE, risk.table = TRUE, title = paste0(celltype, " - ", sig),
-                        pval.coord = c(2800, .95), # p-value location
+                        #pval.coord = c(2800, .95), # p-value location
                         palette = c("#E7B800", "#2E9FDF")
                 )
         )
@@ -519,17 +570,19 @@ res.cox <- res.cox |>
 # )
 
 res.cox.pancurx <- res.cox
+print("#############CoxPH summary#############")
+print(res.cox.pancurx)
 
 ## Extract data from clin.assoc.list
 holder.list <- lapply(clin.assoc.list, function(clin.assoc) {
-        clin.assoc <- lapply(clin.assoc, function(x) x[, 1])
+        clin.assoc <- lapply(clin.assoc, function(x) x[, 3]) # 1 for estimated coefficient, 3 for t-statistic
         as.data.frame(do.call(rbind, clin.assoc)) %>% rownames_to_column("signature")
 })
-holder.list <- lapply(names(holder.list), function(clin.var) {
-        df <- holder.list[[clin.var]]
-        names(df) <- plyr::mapvalues(names(df), from = c("V1"), to = c(clin.var))
-        df
-})
+# holder.list <- lapply(names(holder.list), function(clin.var) {
+#         df <- holder.list[[clin.var]]
+#         names(df) <- plyr::mapvalues(names(df), from = c("V1"), to = c(clin.var))
+#         df
+# })
 names(holder.list) <- names(clin.assoc.list)
 
 clin.assoc.pancurx <- Reduce(function(x, y) {
@@ -537,11 +590,13 @@ clin.assoc.pancurx <- Reduce(function(x, y) {
 }, holder.list)
 holder <- res.cox |>
         select(signature, HR) |>
-        mutate(HR = HR - 1)
-names(holder) <- c("signature", "HR-1")
+        mutate(HR = log(HR))
+names(holder) <- c("signature", "log(HR)")
 clin.assoc.pancurx <- left_join(holder, clin.assoc.pancurx, by = "signature")
-
 rm(holder.list, holder)
+
+print("#############Clinical association#############")
+print(clin.assoc.pancurx)
 
 holder.list <- lapply(clin.assoc.list, function(clin.assoc) {
         clin.assoc <- lapply(clin.assoc, function(x) x[, 4])
@@ -558,11 +613,12 @@ clin.assoc.pancurx.pval <- Reduce(function(x, y) {
         left_join(x, y, by = "signature")
 }, holder.list)
 holder <- res.cox |> select(signature, p.adj)
-names(holder) <- c("signature", "HR-1")
+names(holder) <- c("signature", "log(HR)")
 clin.assoc.pancurx.pval <- left_join(holder, clin.assoc.pancurx.pval, by = "signature")
-
 rm(holder.list, holder)
 
+print("#############Clinical association p-value#############")
+print(clin.assoc.pancurx.pval)
 
 # TO SAVE
 saveRDS(gsva.es, snakemake@output[["gsva_es_pancurx"]])
