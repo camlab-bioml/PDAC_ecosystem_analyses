@@ -370,7 +370,7 @@ rule figure_2_preparation:
 		patient_profiles_validated = resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/validated/loading-median/patient-{compartment}-signature-profiles-loading-median-validated.tsv',
 		patient_profiles_collapsed = resultoutput + 'LIGER/patient-analysis/patient-signature-profiles/collapsed/loading-median/patient-{compartment}-signature-profiles-loading-median-collapsed.tsv',
 		sig_loading_mtx = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-signature-loading-' + wildcards.condition + '.tsv', subtype = list(ct_for_patient_profile[wildcards.compartment])),
-		gene_loading_mtx = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/gene-loading-analysis/{subtype}-signature-top-gene-loading-' + wildcards.condition + '.tsv', subtype = list(ct_for_patient_profile[wildcards.compartment])),
+		gene_loading_mtx = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{subtype}/loading-matrices/{subtype}-gene-loading-' + wildcards.condition + '.tsv', subtype = list(ct_for_patient_profile[wildcards.compartment])),
 	params:
 		celltypes = lambda wildcards: list(ct_for_patient_profile[wildcards.compartment]),
 		num_top_genes_to_show = config['figure2']['num_top_genes_to_show'],
@@ -429,6 +429,53 @@ rule draw_figure_2:
 	threads: 1
 	script:
 		'signature-analysis/draw-figure-2.R'
+
+rule draw_figure_1_new:
+	input:
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		schematic = "resources/New_Schematic_V4.pdf",
+		metadata_dis = resultoutput + 'cohort-discovery-validation-grouping/figure-1/metadata-discovery.tsv',
+		dimred_dis = resultoutput + 'cohort-discovery-validation-grouping/figure-1/dimred-discovery.tsv',
+		metadata_val = resultoutput + 'cohort-discovery-validation-grouping/figure-1/metadata-validation.tsv',
+		dimred_val = resultoutput + 'cohort-discovery-validation-grouping/figure-1/dimred-validation.tsv',
+		sce_dis = dataoutput + 'cohort-discovery-validation-grouping/figure-1/sce-prepared-discovery.rds',
+		sce_val = dataoutput + 'cohort-discovery-validation-grouping/figure-1/sce-prepared-validation.rds',
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		ambient_sigs = config['figure2']['ambient_sigs'],
+		sig_number = resultoutput + 'LIGER/signature-analysis/figure-2/full/signature-number-df-collapsed.rds',
+		selected_sig_top_gene_loading_mtx_list = resultoutput + 'LIGER/signature-analysis/figure-2/full/collapsed/selected-signature-top-gene-loading-mtrices-collapsed.rds',
+	params:
+		cell_type_pallete = config['figure1']['cell_type_pallete_to_use'],
+		cohorts_discovery = discovery_cohorts,
+		cohorts_validation = validation_cohorts,
+		metadata_plot_width = config['figure1']['metadata_plot_width'],
+		metadata_plot_height = config['figure1']['metadata_plot_height'],
+		umap_plot_width = 10,
+		umap_plot_height = 10,
+		stacked_bar_plot_width = 9,
+		stacked_bar_plot_height = 6,
+		marker_dot_plot_width = config['figure1']['marker_dot_plot_width'],
+		marker_dot_plot_height = config['figure1']['marker_dot_plot_height'],
+		figure1_width = 11,
+		figure1_height = 18,
+	output:
+		#cohort_pal = figureoutput + 'cohort-palette.rds',
+		#celltype_pal = figureoutput + 'celltype-palette.rds',
+		figure1_a = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-A.png',
+		figure1_b_supp = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-B-supp.png',
+		figure1_b = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-B.png',
+		figure1_c = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-C.png',
+		figure1_d_supp = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-D-supp.png',
+		figure1_d = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-D.png',
+		figure1_e = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-E.png',
+		figure1_f = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1-F.png',
+		figure1_png = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1.png',
+		figure1_pdf = figureoutput + 'LIGER/signature-analysis/figure-1-new/figure-1.pdf',
+	resources:
+		mem_mb = 80000
+	threads: 32
+	script:
+		'signature-analysis/draw-figure-1-new.R'
 
 rule figure_3_preparation:
 	input:

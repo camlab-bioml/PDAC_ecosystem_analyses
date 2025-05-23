@@ -195,6 +195,51 @@ rule draw_figure_4:
 	script:
 		'patient-analysis/draw-figure-4.R'
 
+rule draw_figure_2_new:
+	input:
+		celltype_pal = figureoutput + 'celltype-palette.rds',
+		cohort_pal = figureoutput + 'cohort-palette.rds',
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		ambient_sigs = config['figure2']['ambient_sigs'],
+		schematic = "resources/New_Cooccurrence_Schematic.pdf",
+		patient_profiles_correlation_data_frame_full_and_intra = resultoutput + 'LIGER/patient-analysis/figure-4/loading-mean/patient-{compartment}-signature-profiles-loading-mean-correlation-data-frame-full-and-intra.tsv',
+		#patient_profiles_correlation_data_frame_inter = resultoutput + 'LIGER/patient-analysis/figure-4/loading-mean/patient-{compartment}-signature-profiles-loading-mean-correlation-data-frame-inter.tsv',
+		signature_correlation_comparison_data_frame_list_examples = resultoutput + 'LIGER/patient-analysis/figure-4/loading-mean/patient-{compartment}-signature-loading-mean-correlation-comparison-data-frame-list-examples.rds',
+		signature_cooccurrence_agreement_data_frame = resultoutput + 'LIGER/patient-analysis/signature-correlation-comparison/loading-mean/patient-{compartment}-signature-loading-mean-cooccurrence-agreement-data-frame.tsv',
+	params:
+		figure2_a_width = config['figure4']['figure4_a_width'],
+		figure2_a_height = config['figure4']['figure4_a_height'],
+		figure2_b_width = 5.1,
+		figure2_b_height = 5,
+		figure2_c_width = config['figure4']['figure4_c_width'],
+		figure2_c_height = config['figure4']['figure4_c_height'],
+		figure2_d_width = config['figure4']['figure4_d_width'],
+		figure2_d_height = config['figure4']['figure4_d_height'],
+		figure2_e_width = config['figure4']['figure4_e_width'],
+		figure2_e_height = config['figure4']['figure4_e_height'],
+		figure2_f_width = config['figure4']['figure4_f_width'],
+		figure2_f_height = config['figure4']['figure4_f_height'],
+		figure2_width = 14,
+		figure2_height = 16,
+		celltypes = lambda wildcards: list(stan_ct_config[wildcards.compartment]),
+	output:
+		figure2_a = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-a-loading-mean-{compartment}.png',
+		figure2_b = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-b-loading-mean-{compartment}.png',
+		figure2_c = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-c-loading-mean-{compartment}.png',
+		figure2_d = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-d-loading-mean-{compartment}.png',
+		figure2_e = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-e-loading-mean-{compartment}.png',
+		figure2_f = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-f-loading-mean-{compartment}.png',
+		figure2_png = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-loading-mean-{compartment}.png',
+		figure2_pdf = figureoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/figure-2-loading-mean-{compartment}.pdf',
+		signature_metrics_summary = resultoutput + 'LIGER/patient-analysis/figure-2-new/{compartment}/loading-mean/signature-metrics-summary.tsv',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'patient-analysis/draw-figure-2-new.R'
+
+
 rule stan_make_data:
 	input:
 		celltype_sig_loading_mtxs = lambda wildcards: expand(resultoutput + 'LIGER/signature-analysis/{celltype}/loading-matrices/{celltype}-signature-loading-' + wildcards.condition + '.tsv', celltype = list(stan_ct_config[wildcards.scope])),
@@ -422,3 +467,57 @@ rule draw_figure_5:
 	threads: 1
 	script:
 		'patient-analysis/draw-figure-5.R'
+
+rule draw_figure_3_new:
+	input:
+		celltype_pal = figureoutput + 'celltype-palette.rds',
+		cohort_pal = figureoutput + 'cohort-palette.rds',
+		sig_interpretation = config['figure2']['sig_interpretation'],
+		cell_type_rename = config['figure1']['cell_type_rename_csv'],
+		ambient_sigs = config['figure2']['ambient_sigs'],
+		schematic = 'resources/Visium_validation_schematic.pdf',
+		panel_b = 'resources/ecosystem_disval_corr.pdf',
+		panel_c = 'resources/moranI_eyeplot.pdf',
+		panel_d = 'resources/cNMF_eyeplot.pdf',
+		panel_e1 = 'resources/niches_1-HT242P1H1-S1Fc1U1.pdf',
+		panel_e2 = 'resources/niches_B1_HT270P1-S1H1Fs5U1.pdf',
+		panel_e3 = 'resources/niches_B1-HT264P1-S1H2Fc2U1.pdf',
+		panel_e4 = 'resources/niches_D1-HT306P1-S1H1Fc2U1.pdf',
+		panel_e = 'resources/Visium_spots_samples.pdf',
+		panel_d_supp = config['figure5']['panel_d'],
+		panel_e_supp = config['figure5']['panel_e'],
+		microenvironment_niche_factors_combined = resultoutput + 'LIGER/patient-analysis/figure-5/microenvironment-niche-factors-{scope}-env-combined.tsv',
+		#microenvironment_niche_factors_corr = resultoutput + 'LIGER/patient-analysis/figure-5/microenvironment-niche-factors-{scope}-env-corr.tsv',
+		microenvironment_niche_factor_loadings_to_compare = resultoutput + 'LIGER/patient-analysis/figure-5/microenvironment-niche-factor-{scope}-env-loadings-to-compare.tsv',
+		intrinsic_covariance_matrices_correlation_data = resultoutput + 'LIGER/patient-analysis/figure-5/intrinsic-covariance-matrices-{scope}-env-corr.tsv',
+		intrinsic_covariance_matrices_list_to_plot = resultoutput + 'LIGER/patient-analysis/figure-5/intrinsic-covariance-matrices-{scope}-env.rds',
+	params:
+		celltypes = lambda wildcards: list(stan_ct_config[wildcards.scope]),
+		figure3_a_width = 5,
+		figure3_a_height = 5,
+		figure3_b_width = config['figure5']['figure5_b_width'],
+		figure3_b_height = config['figure5']['figure5_b_height'],
+		figure3_c_width = config['figure5']['figure5_c_width'],
+		figure3_c_height = config['figure5']['figure5_c_height'],
+		figure3_d_width = config['figure5']['figure5_d_width'],
+		figure3_d_height = config['figure5']['figure5_d_height'],
+		figure3_e_width = config['figure5']['figure5_e_width'],
+		figure3_e_height = config['figure5']['figure5_e_height'],
+		figure3_width = 12,
+		figure3_height = 14,
+	output:
+		figure3_a = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-a-{scope}.png',
+		figure3_b = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-b-{scope}.png',
+		figure3_c = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-c-{scope}.png',
+		figure3_d = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-d-{scope}.png',
+		figure3_e = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-e-{scope}.png',
+		figure3_c_supp = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-c-supp-{scope}.pdf',
+		figure3_d_supp = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-d-supp-{scope}.png',
+		figure3_e_supp = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-e-supp-{scope}.png',
+		figure3_png = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-{scope}.png',
+		figure3_pdf = figureoutput + 'LIGER/patient-analysis/figure-3-new/{scope}/figure-3-{scope}.pdf',
+	resources:
+		mem_mb = 1000
+	threads: 1
+	script:
+		'patient-analysis/draw-figure-3-new.R'
